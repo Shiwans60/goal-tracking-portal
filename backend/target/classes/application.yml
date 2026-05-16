@@ -1,0 +1,84 @@
+spring:
+  application:
+    name: atomquest-goal-tracker
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/atomquest}
+    username: ${DATABASE_USERNAME:atomquest}
+    password: ${DATABASE_PASSWORD:atomquest_dev}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: update          # Flyway owns DDL; Hibernate only validates
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:your-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:your-client-secret}
+            redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
+            scope:
+              - email
+              - profile
+
+  mail:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+# JWT
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-replace-in-production-256bits}
+    expiry-ms: ${JWT_EXPIRY_MS:86400000}
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+  mail-from: ${MAIL_FROM:noreply@company.com}
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+
+# Actuator / Health
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+logging:
+  level:
+    com.atomquest: DEBUG
+    org.springframework.security: INFO

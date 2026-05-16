@@ -1,0 +1,35 @@
+@use '@angular/material' as mat;
+
+@include mat.core();
+
+$primary-palette: mat.define-palette(mat.$indigo-palette);
+$accent-palette:  mat.define-palette(mat.$amber-palette, A200, A100, A400);
+$warn-palette:    mat.define-palette(mat.$red-palette);
+
+$theme: mat.define-light-theme((
+  color: (
+    primary: $primary-palette,
+    accent:  $accent-palette,
+    warn:    $warn-palette,
+  ),
+  typography: mat.define-typography-config(),
+  density: 0,
+));
+
+@include mat.all-component-themes($theme);
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  background: #fafafa;
+  color: #212121;
+}
+
+/* Utility */
+.text-center { text-align: center; }
+.text-muted  { color: #757575; }
+.mt-16       { margin-top: 16px; }
+.mb-16       { margin-bottom: 16px; }

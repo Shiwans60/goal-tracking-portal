@@ -1,0 +1,10 @@
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Maven Start Up Batch script (POSIX)
+# Minimal wrapper for AtomQuest project
+# ----------------------------------------------------------------------------
+MAVEN_OPTS="${MAVEN_OPTS:-}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MAVEN_HOME="${SCRIPT_DIR}/.mvn/wrapper"
+
+exec mvn "$@"
