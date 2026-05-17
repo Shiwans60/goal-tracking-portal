@@ -23,11 +23,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public class GoalService {
 
-    private final GoalRepository goalRepository;
-    private final UserRepository userRepository;
-    private final CycleRepository cycleRepository;
+    private final GoalRepository   goalRepository;
+    private final UserRepository   userRepository;
+    private final CycleRepository  cycleRepository;
 
-    // ── Queries ──────────────────────────────────────────────────────────────
+    // ── Employee: own goals ──────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<GoalDtos.GoalResponse> getMyGoals(String userId, UUID cycleId) {
@@ -48,11 +48,15 @@ public class GoalService {
         return toResponse(goal);
     }
 
+    // ── Manager: team goals ──────────────────────────────────────────────────
+
     @Transactional(readOnly = true)
     public List<GoalDtos.GoalResponse> getTeamGoals(String managerId, UUID cycleId) {
+        UUID mgr = UUID.fromString(managerId);
+        // Fixed: use findAllTeamGoals when no cycleId provided
         List<Goal> goals = cycleId != null
-                ? goalRepository.findTeamGoalsByCycle(UUID.fromString(managerId), cycleId)
-                : goalRepository.findByManagerIdAndStatus(UUID.fromString(managerId), null);
+                ? goalRepository.findTeamGoalsByCycle(mgr, cycleId)
+                : goalRepository.findAllTeamGoals(mgr);
         return goals.stream().map(this::toResponse).collect(Collectors.toList());
     }
 
@@ -117,11 +121,6 @@ public class GoalService {
         if (goal.getStatus() != GoalStatus.DRAFT && goal.getStatus() != GoalStatus.REWORK) {
             throw new BusinessException("Only DRAFT or REWORK goals can be submitted");
         }
-
-        // Validate total weightage will equal 100 once this is submitted
-        BigDecimal alreadyApproved = goalRepository.sumWeightageByEmployeeAndCycle(
-                goal.getEmployee().getId(), goal.getCycle().getId());
-        // (full 100% check is done at approval time; here we just validate minimum)
         if (goal.getWeightage().compareTo(BigDecimal.TEN) < 0) {
             throw new BusinessException("Each goal must have at least 10% weightage");
         }
@@ -137,7 +136,6 @@ public class GoalService {
         if (goal.getStatus() != GoalStatus.PENDING_APPROVAL) {
             throw new BusinessException("Only PENDING_APPROVAL goals can be approved");
         }
-
         User manager = findUser(managerId);
         goal.setStatus(GoalStatus.APPROVED);
         goal.setLocked(true);
