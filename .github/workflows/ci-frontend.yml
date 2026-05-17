@@ -35,4 +35,9 @@ jobs:
 
       - name: Run unit tests
         working-directory: frontend
-        run: npx ng test --watch=false --browsers=ChromeHeadless
+        run: |
+          if find src -name "*.spec.ts" | grep -q .; then
+            npx ng test --watch=false --browsers=ChromeHeadless
+          else
+            echo "No spec files found. Skipping tests."
+          fi
