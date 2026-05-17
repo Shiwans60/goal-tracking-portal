@@ -9,9 +9,23 @@ import com.atomquest.goaltracker.security.JwtUtils;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Phase 2 AuthService.
+ *
+ * Responsibilities:
+ *  1. Verify the Google ID token with Google's servers.
+ *  2. Upsert the user (preserve existing role; default new users to EMPLOYEE).
+ *  3. Issue an AtomQuest JWT and return it with the user profile.
+ *
+ * NOTE: Role assignment is done by admins via /api/admin/users — never
+ *       auto-promoted here — so the upsert logic intentionally preserves
+ *       existing roles and only defaults new accounts to ROLE_EMPLOYEE.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -21,15 +35,15 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtUtils jwtUtils;
 
-    /**
-     * Verifies the Google ID token, upserts the user in the DB,
-     * and returns a signed JWT plus user details.
-     */
     @Transactional
     public AuthDtos.AuthResponse loginWithGoogle(String idTokenString) {
+
+        // ── 1. Verify with Google ────────────────────────────────────────────
         GoogleIdToken idToken = googleVerifier.verify(idTokenString);
         if (idToken == null) {
-            throw new SecurityException("Invalid or expired Google ID token");
+            log.warn("Rejected invalid / expired Google ID token");
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Invalid or expired Google ID token");
         }
 
         GoogleIdToken.Payload payload = idToken.getPayload();
@@ -37,11 +51,14 @@ public class AuthService {
         String name    = (String) payload.get("name");
         String picture = (String) payload.get("picture");
 
-        // Upsert: preserve existing role & department
+        // ── 2. Upsert user ───────────────────────────────────────────────────
         User user = userRepository.findByEmail(email)
                 .map(existing -> {
+                    // Update mutable fields, but PRESERVE role & department
                     existing.setName(name != null ? name : existing.getName());
-                    existing.setPicture(picture);
+                    if (picture != null) existing.setPicture(picture);
+                    existing.setActive(true);
+                    log.debug("Existing user login: {} [{}]", email, existing.getRole());
                     return existing;
                 })
                 .orElseGet(() -> {
@@ -49,17 +66,19 @@ public class AuthService {
                             .email(email)
                             .name(name != null ? name : email)
                             .picture(picture)
-                            .role(UserRole.ROLE_EMPLOYEE)
+                            .role(UserRole.ROLE_EMPLOYEE)   // default; admin can promote later
                             .active(true)
                             .build();
-                    log.info("New user registered via Google OAuth: {}", email);
+                    log.info("New user self-registered via Google OAuth2: {}", email);
                     return newUser;
                 });
 
         user = userRepository.save(user);
 
+        // ── 3. Issue AtomQuest JWT ───────────────────────────────────────────
         String jwt = jwtUtils.generateToken(user);
 
+        // ── 4. Build response ────────────────────────────────────────────────
         AuthDtos.AuthResponse.UserDto userDto = new AuthDtos.AuthResponse.UserDto();
         userDto.setId(user.getId().toString());
         userDto.setEmail(user.getEmail());

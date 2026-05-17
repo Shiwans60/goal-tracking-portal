@@ -18,6 +18,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * Phase 2 JWT authentication filter.
+ *
+ * Reads the "Authorization: Bearer <token>" header, validates the JWT,
+ * and populates the Spring SecurityContext with an AppUserPrincipal —
+ * without touching the database.
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -26,43 +33,52 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtils jwtUtils;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain)
+    protected void doFilterInternal(
+            HttpServletRequest  request,
+            HttpServletResponse response,
+            FilterChain         filterChain)
             throws ServletException, IOException {
 
-        String token = extractToken(request);
+        String token = extractBearerToken(request);
 
-        if (StringUtils.hasText(token) && jwtUtils.isValid(token)) {
-            try {
-                Claims claims = jwtUtils.validateAndParseClaims(token);
+        if (StringUtils.hasText(token)) {
+            if (jwtUtils.isValid(token)) {
+                try {
+                    Claims claims = jwtUtils.validateAndParseClaims(token);
 
-                String userId = claims.getSubject();
-                String role   = claims.get("role", String.class);
-                String email  = claims.get("email", String.class);
+                    String userId = claims.getSubject();
+                    String role   = claims.get("role",  String.class);
+                    String email  = claims.get("email", String.class);
 
-                // Build a lightweight principal — no DB call needed
-                AppUserPrincipal principal = new AppUserPrincipal(userId, email, role);
-                List<SimpleGrantedAuthority> authorities =
-                        List.of(new SimpleGrantedAuthority(role));
+                    // Build principal from JWT claims — zero DB calls
+                    AppUserPrincipal principal = new AppUserPrincipal(userId, email, role);
 
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(principal, null, authorities);
-                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    UsernamePasswordAuthenticationToken auth =
+                            new UsernamePasswordAuthenticationToken(
+                                    principal,
+                                    null,
+                                    List.of(new SimpleGrantedAuthority(role))
+                            );
+                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
 
-                SecurityContextHolder.getContext().setAuthentication(auth);
-            } catch (Exception e) {
-                log.warn("Could not set authentication from JWT: {}", e.getMessage());
+                } catch (Exception e) {
+                    log.warn("JWT principal extraction failed for request [{}]: {}",
+                            request.getRequestURI(), e.getMessage());
+                }
+            } else {
+                log.debug("Invalid JWT on request [{}]", request.getRequestURI());
             }
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private String extractToken(HttpServletRequest request) {
+    /** Extracts the raw token string from "Authorization: Bearer <token>". */
+    private String extractBearerToken(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
         if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
-            return header.substring(7);
+            return header.substring(7).trim();
         }
         return null;
     }

@@ -4,6 +4,7 @@ import com.atomquest.goaltracker.dto.goal.GoalDtos;
 import com.atomquest.goaltracker.security.AppUserPrincipal;
 import com.atomquest.goaltracker.service.GoalService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import java.util.UUID;
 @RequestMapping("/api/goals")
 @RequiredArgsConstructor
 @Tag(name = "Goals", description = "Goal lifecycle management")
+@SecurityRequirement(name = "Bearer Auth")
 public class GoalController {
 
     private final GoalService goalService;
@@ -27,8 +29,8 @@ public class GoalController {
     // ── Employee: own goals ──────────────────────────────────────────────────
 
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "List my goals for the active cycle")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
+    @Operation(summary = "List my goals for the active (or specified) cycle")
     public ResponseEntity<List<GoalDtos.GoalResponse>> getMyGoals(
             @RequestParam(required = false) UUID cycleId,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -37,18 +39,19 @@ public class GoalController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Get single goal by ID")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
+    @Operation(summary = "Get a single goal by ID (owner or manager only)")
     public ResponseEntity<GoalDtos.GoalResponse> getGoal(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
 
-        return ResponseEntity.ok(goalService.getGoalById(id, principal.getUserId(), principal.getRole()));
+        return ResponseEntity.ok(
+                goalService.getGoalById(id, principal.getUserId(), principal.getRole()));
     }
 
     @PostMapping
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
-    @Operation(summary = "Create a new goal (DRAFT)")
+    @Operation(summary = "Create a new goal (starts in DRAFT status)")
     public ResponseEntity<GoalDtos.GoalResponse> createGoal(
             @Valid @RequestBody GoalDtos.CreateGoalRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -59,7 +62,7 @@ public class GoalController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
-    @Operation(summary = "Update a DRAFT goal")
+    @Operation(summary = "Update a DRAFT or REWORK goal (owner only)")
     public ResponseEntity<GoalDtos.GoalResponse> updateGoal(
             @PathVariable UUID id,
             @Valid @RequestBody GoalDtos.UpdateGoalRequest request,
@@ -70,7 +73,7 @@ public class GoalController {
 
     @PatchMapping("/{id}/submit")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
-    @Operation(summary = "Submit a DRAFT goal for manager approval")
+    @Operation(summary = "Submit a DRAFT or REWORK goal for manager approval")
     public ResponseEntity<GoalDtos.GoalResponse> submitGoal(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -80,7 +83,7 @@ public class GoalController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
-    @Operation(summary = "Delete a DRAFT goal")
+    @Operation(summary = "Delete a DRAFT goal (owner only)")
     public ResponseEntity<Void> deleteGoal(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -89,11 +92,11 @@ public class GoalController {
         return ResponseEntity.noContent().build();
     }
 
-    // ── Manager: team goals ──────────────────────────────────────────────────
+    // ── Manager / Admin: team goals ──────────────────────────────────────────
 
     @GetMapping("/team")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    @Operation(summary = "List team goals (manager view)")
+    @Operation(summary = "List all goals for the manager's direct reports")
     public ResponseEntity<List<GoalDtos.GoalResponse>> getTeamGoals(
             @RequestParam(required = false) UUID cycleId,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -103,7 +106,7 @@ public class GoalController {
 
     @PatchMapping("/{id}/approve")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    @Operation(summary = "Approve a submitted goal")
+    @Operation(summary = "Approve a PENDING_APPROVAL goal (locks it)")
     public ResponseEntity<GoalDtos.GoalResponse> approveGoal(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -113,23 +116,25 @@ public class GoalController {
 
     @PatchMapping("/{id}/reject")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    @Operation(summary = "Reject a submitted goal with a note")
+    @Operation(summary = "Reject a PENDING_APPROVAL goal with a mandatory note")
     public ResponseEntity<GoalDtos.GoalResponse> rejectGoal(
             @PathVariable UUID id,
             @Valid @RequestBody GoalDtos.RejectGoalRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
 
-        return ResponseEntity.ok(goalService.rejectGoal(id, request.getNote(), principal.getUserId()));
+        return ResponseEntity.ok(
+                goalService.rejectGoal(id, request.getNote(), principal.getUserId()));
     }
 
     @PatchMapping("/{id}/rework")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    @Operation(summary = "Return a goal for rework with a note")
+    @Operation(summary = "Return a PENDING_APPROVAL goal for rework with a note")
     public ResponseEntity<GoalDtos.GoalResponse> returnForRework(
             @PathVariable UUID id,
             @Valid @RequestBody GoalDtos.RejectGoalRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
 
-        return ResponseEntity.ok(goalService.returnForRework(id, request.getNote(), principal.getUserId()));
+        return ResponseEntity.ok(
+                goalService.returnForRework(id, request.getNote(), principal.getUserId()));
     }
 }

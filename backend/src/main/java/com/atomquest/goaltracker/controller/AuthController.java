@@ -7,6 +7,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.atomquest.goaltracker.security.AppUserPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,12 +21,14 @@ public class AuthController {
     private final AuthService authService;
 
     /**
-     * Exchanges a Google ID token (from the frontend) for an AtomQuest JWT.
-     * This endpoint is public (no Bearer token needed).
+     * Exchanges a Google ID token (from the frontend One Tap / redirect flow)
+     * for an AtomQuest JWT. Public — no Bearer token required.
      */
     @PostMapping("/google")
-    @Operation(summary = "Google OAuth2 login",
-            description = "Verifies a Google ID token and returns an AtomQuest JWT")
+    @Operation(
+            summary = "Google OAuth2 login",
+            description = "Verifies a Google ID token and returns an AtomQuest JWT + user info"
+    )
     public ResponseEntity<AuthDtos.AuthResponse> googleLogin(
             @Valid @RequestBody AuthDtos.GoogleLoginRequest request) {
 
@@ -32,10 +37,25 @@ public class AuthController {
     }
 
     /**
-     * Simple liveness check for the auth subsystem (no auth needed).
+     * Returns the currently authenticated user's profile (no DB hit —
+     * data comes straight from the JWT claims stored in AppUserPrincipal).
      */
+    @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Current user profile", description = "Returns profile from JWT claims")
+    public ResponseEntity<AuthDtos.AuthResponse.UserDto> me(
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+
+        AuthDtos.AuthResponse.UserDto dto = new AuthDtos.AuthResponse.UserDto();
+        dto.setId(principal.getUserId());
+        dto.setEmail(principal.getEmail());
+        dto.setRole(principal.getRole());
+        return ResponseEntity.ok(dto);
+    }
+
+    /** Simple liveness check — no auth needed. */
     @GetMapping("/ping")
-    @Operation(summary = "Auth ping", description = "Returns OK if auth service is reachable")
+    @Operation(summary = "Auth ping")
     public ResponseEntity<String> ping() {
         return ResponseEntity.ok("ok");
     }
