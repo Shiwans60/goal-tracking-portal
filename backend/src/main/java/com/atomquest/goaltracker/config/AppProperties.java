@@ -12,14 +12,16 @@ import org.springframework.stereotype.Component;
 public class AppProperties {
 
     private Jwt jwt = new Jwt();
-    private String frontendUrl = "http://localhost:4200";
-    private String mailFrom = "noreply@company.com";
-    private String corsAllowedOrigins = "http://localhost:4200";
+    private String frontendUrl         = "http://localhost:4200";
+    private String mailFrom            = "noreply@company.com";
+    private String corsAllowedOrigins  = "http://localhost:4200";
+    /** Google OAuth2 client ID used to verify ID tokens on the backend */
+    private String googleClientId      = "your-google-client-id";
 
     @Getter
     @Setter
     public static class Jwt {
         private String secret;
-        private long expiryMs = 86_400_000L;
+        private long expiryMs = 86_400_000L;   // 24 h default
     }
 }
