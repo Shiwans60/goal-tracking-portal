@@ -1,0 +1,109 @@
+import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string;
+  role: 'ROLE_EMPLOYEE' | 'ROLE_MANAGER' | 'ROLE_ADMIN';
+  department?: string;
+  active: boolean;
+  manager?: ManagerRef;
+  directReports: DirectReportRef[];
+}
+
+export interface ManagerRef {
+  id: string;
+  name: string;
+  email: string;
+  department?: string;
+}
+
+export interface DirectReportRef {
+  id: string;
+  name: string;
+  email: string;
+  department?: string;
+  role: string;
+}
+
+export interface OrgChartNode {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department?: string;
+  managerId?: string;
+  managerName?: string;
+  directReportCount: number;
+}
+
+export interface UpdateProfileRequest {
+  name: string;
+  department?: string;
+}
+
+export interface AdminUserResponse {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  department?: string;
+  active: boolean;
+  managerId?: string;
+  managerName?: string;
+}
+
+@Injectable({ providedIn: 'root' })
+export class UserService {
+  private http = inject(HttpClient);
+  private base = `${environment.apiBaseUrl}/api`;
+
+  /* ── Profile ─────────────────────────────────────────────────────── */
+
+  getMyProfile() {
+    return this.http.get<UserProfile>(`${this.base}/users/me`);
+  }
+
+  updateMyProfile(payload: UpdateProfileRequest) {
+    return this.http.put<UserProfile>(`${this.base}/users/me`, payload);
+  }
+
+  getUserProfile(id: string) {
+    return this.http.get<UserProfile>(`${this.base}/users/${id}`);
+  }
+
+  /* ── Org hierarchy ───────────────────────────────────────────────── */
+
+  getOrgChart() {
+    return this.http.get<OrgChartNode[]>(`${this.base}/users/org-chart`);
+  }
+
+  getDirectReports() {
+    return this.http.get<DirectReportRef[]>(`${this.base}/users/direct-reports`);
+  }
+
+  /* ── Admin user management ───────────────────────────────────────── */
+
+  getAllUsers() {
+    return this.http.get<AdminUserResponse[]>(`${this.base}/admin/users`);
+  }
+
+  updateRole(userId: string, role: string) {
+    return this.http.patch<AdminUserResponse>(`${this.base}/admin/users/${userId}/role`, { role });
+  }
+
+  updateManager(userId: string, managerId: string | null) {
+    return this.http.patch<AdminUserResponse>(
+      `${this.base}/admin/users/${userId}/manager`,
+      { managerId }
+    );
+  }
+
+  toggleActive(userId: string, active: boolean) {
+    let params = new HttpParams().set('active', String(active));
+    return this.http.patch<void>(`${this.base}/admin/users/${userId}/active`, null, { params });
+  }
+}
