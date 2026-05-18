@@ -38,6 +38,11 @@ export const routes: Routes = [
           import('./features/checkins/checkins.routes').then(m => m.checkinRoutes)
       },
       {
+        path: 'shared-goals',
+        loadChildren: () =>
+          import('./features/shared-goals/shared-goals.routes').then(m => m.sharedGoalRoutes)
+      },
+      {
         path: 'reports',
         loadChildren: () =>
           import('./features/reports/reports.routes').then(m => m.reportRoutes)

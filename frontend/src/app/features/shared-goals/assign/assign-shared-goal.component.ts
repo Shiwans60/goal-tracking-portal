@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
@@ -15,6 +15,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatStepperModule } from '@angular/material/stepper';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { SharedGoalService, CreateSharedGoalRequest } from '../../../core/services/shared-goal.service';
 import { UserService, AdminUserResponse } from '../../../core/services/user.service';
 import { UomType } from '../../../core/models/goal.model';
@@ -45,7 +46,7 @@ const THRUST_AREAS = [
     MatSelectModule, MatButtonModule, MatIconModule,
     MatChipsModule, MatCheckboxModule, MatDatepickerModule,
     MatProgressSpinnerModule, MatSnackBarModule,
-    MatDividerModule, MatStepperModule,
+    MatDividerModule, MatStepperModule, MatProgressBarModule,
   ],
   template: `
     <div class="page-wrapper">
@@ -153,14 +154,12 @@ const THRUST_AREAS = [
         <mat-step label="Select Recipients">
           <div class="step-content">
             <p class="section-hint">
-              Select the employees who will receive this goal on their goal sheet.
-              Recipients may adjust the weightage only.
+              Select the employees who will receive this goal.
+              Recipients may only adjust the weightage.
             </p>
 
             @if (loadingUsers()) {
-              <div class="loading-center">
-                <mat-spinner diameter="32" />
-              </div>
+              <mat-progress-bar mode="indeterminate" />
             } @else {
               <div class="recipient-grid">
                 @for (user of employees(); track user.id) {
@@ -174,18 +173,16 @@ const THRUST_AREAS = [
                       color="primary">
                     </mat-checkbox>
                     <div class="user-avatar">{{ user.name[0].toUpperCase() }}</div>
-                    <div class="user-info">
+                    <div class="user-info-col">
                       <div class="user-name">{{ user.name }}</div>
                       <div class="user-sub">{{ user.email }}</div>
                       @if (user.department) {
                         <div class="user-sub">{{ user.department }}</div>
                       }
                     </div>
-                    <div class="user-meta">
-                      <span class="mgr-badge" *ngIf="user.managerName">
-                        Mgr: {{ user.managerName }}
-                      </span>
-                    </div>
+                    @if (user.managerName) {
+                      <div class="mgr-badge">Mgr: {{ user.managerName }}</div>
+                    }
                   </div>
                 }
               </div>
@@ -292,9 +289,9 @@ const THRUST_AREAS = [
     .step-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
 
     .section-hint { color: #666; font-size: 14px; margin-bottom: 16px; }
-    .loading-center { display: flex; justify-content: center; padding: 32px; }
 
-    .recipient-grid { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
+    .recipient-grid { display: flex; flex-direction: column; gap: 4px;
+                      max-height: 400px; overflow-y: auto; margin-bottom: 12px; }
     .recipient-row {
       display: flex; align-items: center; gap: 12px;
       padding: 10px 14px; border-radius: 8px; cursor: pointer;
@@ -308,14 +305,14 @@ const THRUST_AREAS = [
       display: flex; align-items: center; justify-content: center;
       font-weight: 700; flex-shrink: 0; font-size: 14px;
     }
-    .user-info { flex: 1; }
+    .user-info-col { flex: 1; }
     .user-name { font-weight: 500; }
     .user-sub  { font-size: 12px; color: #888; }
     .mgr-badge { font-size: 11px; color: #666; }
 
     .selected-summary {
       display: flex; align-items: center; gap: 6px;
-      margin-top: 12px; font-size: 14px; color: #1a237e; font-weight: 500;
+      font-size: 14px; color: #1a237e; font-weight: 500;
     }
 
     .review-card { background: #f9f9f9; border-radius: 8px; padding: 20px; }
@@ -352,13 +349,12 @@ export class AssignSharedGoalComponent implements OnInit {
   uomOptions  = UOM_OPTIONS;
   thrustAreas = THRUST_AREAS;
 
-  cycles      = signal<Cycle[]>([]);
-  employees   = signal<AdminUserResponse[]>([]);
-  selectedIds = signal<Set<string>>(new Set());
-  saving      = signal(false);
+  cycles       = signal<Cycle[]>([]);
+  employees    = signal<AdminUserResponse[]>([]);
+  selectedIds  = signal<Set<string>>(new Set());
+  saving       = signal(false);
   loadingUsers = signal(true);
-
-  selectedUom = signal<UomType | null>(null);
+  selectedUom  = signal<UomType | null>(null);
 
   goalForm = this.fb.group({
     cycleId:          ['', Validators.required],
@@ -376,19 +372,17 @@ export class AssignSharedGoalComponent implements OnInit {
       this.selectedUom.set(v as UomType)
     );
 
-    // Load active cycles
     this.http.get<Cycle[]>(`${environment.apiBaseUrl}/api/admin/cycles/all`).subscribe({
       next: cs => {
         const active = cs.filter(c => c.status === 'ACTIVE');
-        this.cycles.set(active);
+        this.cycles.set(active.length ? active : cs);
         if (active.length === 1) this.goalForm.patchValue({ cycleId: active[0].id });
       },
+      error: () => {},
     });
 
-    // Load all employees
     this.userService.getAllUsers().subscribe({
       next: users => {
-        // Exclude admins from recipient list
         this.employees.set(users.filter(u => u.active && u.role !== 'ROLE_ADMIN'));
         this.loadingUsers.set(false);
       },
