@@ -8,6 +8,17 @@ import {
   GoalSheetSummary,
 } from '../models/goal.model';
 
+export interface ManagerEditGoalRequest {
+  target?:      number;
+  targetDate?:  string;
+  weightage?:   number;
+  note?:        string;
+}
+
+export interface PendingApprovalCount {
+  count: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class GoalService {
   private http = inject(HttpClient);
@@ -29,6 +40,11 @@ export class GoalService {
     let params = new HttpParams();
     if (cycleId) params = params.set('cycleId', cycleId);
     return this.http.get<Goal[]>(`${this.base}/team`, { params });
+  }
+
+  /** Phase 5 — badge count for manager dashboard */
+  getTeamPendingCount() {
+    return this.http.get<PendingApprovalCount>(`${this.base}/team/pending-count`);
   }
 
   getGoalById(id: string) {
@@ -57,6 +73,11 @@ export class GoalService {
 
   returnForRework(id: string, note: string) {
     return this.http.patch<Goal>(`${this.base}/${id}/rework`, { note });
+  }
+
+  /** Phase 5 — manager inline edit of target/weightage before approval */
+  managerEditGoal(id: string, payload: ManagerEditGoalRequest) {
+    return this.http.patch<Goal>(`${this.base}/${id}/manager-edit`, payload);
   }
 
   deleteGoal(id: string) {

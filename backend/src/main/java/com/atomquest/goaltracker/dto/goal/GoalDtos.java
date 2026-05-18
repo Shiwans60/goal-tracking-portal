@@ -69,6 +69,27 @@ public class GoalDtos {
         private BigDecimal weightage;
     }
 
+    /**
+     * Phase 5 — Manager inline edit on PENDING_APPROVAL goals.
+     * Only target, targetDate, and weightage are editable by the manager.
+     */
+    @Data
+    public static class ManagerEditGoalRequest {
+
+        @DecimalMin(value = "0", inclusive = true)
+        private BigDecimal target;
+
+        private LocalDate targetDate;
+
+        @DecimalMin(value = "10.00", message = "Weightage must be at least 10%")
+        @DecimalMax(value = "100.00", message = "Weightage cannot exceed 100%")
+        private BigDecimal weightage;
+
+        /** Optional annotation / note the manager wants to attach. */
+        @Size(max = 2000)
+        private String note;
+    }
+
     @Data
     public static class RejectGoalRequest {
         @NotBlank(message = "A rejection/rework note is required")
@@ -103,7 +124,6 @@ public class GoalDtos {
 
     /**
      * Summary / stats for the employee's goal sheet within a cycle.
-     * Used by the dashboard and the goal-list header bar.
      */
     @Data
     public static class GoalSheetSummary {
@@ -117,5 +137,13 @@ public class GoalDtos {
         private boolean    weightageComplete;
         /** true when totalGoals >= 8 */
         private boolean    maxGoalsReached;
+    }
+
+    /**
+     * Phase 5 — Manager dashboard: pending approval count for the badge.
+     */
+    @Data
+    public static class PendingApprovalCount {
+        private long count;
     }
 }

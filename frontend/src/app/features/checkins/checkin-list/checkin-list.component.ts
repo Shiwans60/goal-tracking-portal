@@ -256,11 +256,6 @@ export class LogCheckinDialogComponent {
             <mat-card-content>
               <table mat-table [dataSource]="teamEntries()">
 
-                <ng-container matColumnDef="employee">
-                  <th mat-header-cell *matHeaderCellDef>Employee</th>
-                  <td mat-cell *matCellDef="let e">{{ e.goalTitle }}</td>
-                </ng-container>
-
                 <ng-container matColumnDef="goal">
                   <th mat-header-cell *matHeaderCellDef>Goal</th>
                   <td mat-cell *matCellDef="let e">
@@ -375,19 +370,22 @@ export class CheckinListComponent implements OnInit {
   }
 
   openLogDialog(entry: CheckinEntry) {
-    const ref = this.dialog.open(LogCheckinDialogComponent, {
-      width: '420px',
-      data: {
-        goalTitle: entry.goalTitle,
-        goalId:    entry.goalId,
-        quarter:   this.selectedQuarter,
-        uomType:   entry.uomType,
-        target:    entry.target,
-        existing:  entry.id ? entry : undefined,
-      } satisfies import('./checkin-list.component').LogDialogData,
-    });
+    const ref = this.dialog.open<LogCheckinDialogComponent, LogDialogData, UpsertCheckinRequest | null>(
+      LogCheckinDialogComponent,
+      {
+        width: '420px',
+        data: {
+          goalTitle: entry.goalTitle,
+          goalId:    entry.goalId,
+          quarter:   this.selectedQuarter,
+          uomType:   entry.uomType,
+          target:    entry.target,
+          existing:  entry.id ? entry : undefined,
+        },
+      }
+    );
 
-    ref.afterClosed().subscribe((payload: import('../../..').UpsertCheckinRequest | null) => {
+    ref.afterClosed().subscribe((payload: UpsertCheckinRequest | null | undefined) => {
       if (!payload) return;
       this.checkinService.upsertCheckin(entry.goalId, this.selectedQuarter, payload).subscribe({
         next: updated => {

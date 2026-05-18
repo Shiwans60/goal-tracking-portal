@@ -40,7 +40,7 @@ public class GoalController {
 
     @GetMapping("/summary")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
-    @Operation(summary = "Get goal-sheet summary (totals, weightage, counts) for the active cycle")
+    @Operation(summary = "Get goal-sheet summary for the active cycle")
     public ResponseEntity<GoalDtos.GoalSheetSummary> getMySummary(
             @RequestParam(required = false) UUID cycleId,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -51,7 +51,7 @@ public class GoalController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
-    @Operation(summary = "Get a single goal by ID (owner or manager only)")
+    @Operation(summary = "Get a single goal by ID")
     public ResponseEntity<GoalDtos.GoalResponse> getGoal(
             @PathVariable UUID id,
             @AuthenticationPrincipal AppUserPrincipal principal) {
@@ -115,6 +115,21 @@ public class GoalController {
         return ResponseEntity.ok(goalService.getTeamGoals(principal.getUserId(), cycleId));
     }
 
+    /**
+     * Phase 5 — Returns count of PENDING_APPROVAL goals for the manager's team.
+     * Used by the dashboard badge.
+     */
+    @GetMapping("/team/pending-count")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @Operation(summary = "Count of team goals pending manager approval (for dashboard badge)")
+    public ResponseEntity<GoalDtos.PendingApprovalCount> getTeamPendingCount(
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+
+        GoalDtos.PendingApprovalCount result = new GoalDtos.PendingApprovalCount();
+        result.setCount(goalService.countTeamPendingApproval(principal.getUserId()));
+        return ResponseEntity.ok(result);
+    }
+
     @PatchMapping("/{id}/approve")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @Operation(summary = "Approve a PENDING_APPROVAL goal (locks it)")
@@ -147,5 +162,23 @@ public class GoalController {
 
         return ResponseEntity.ok(
                 goalService.returnForRework(id, request.getNote(), principal.getUserId()));
+    }
+
+    /**
+     * Phase 5 — Manager inline edit on PENDING_APPROVAL goals before approval.
+     * Only target, targetDate, and weightage can be changed.
+     */
+    @PatchMapping("/{id}/manager-edit")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @Operation(
+            summary = "Manager inline edit of target/weightage on a PENDING_APPROVAL goal",
+            description = "Allows manager to adjust target value, target date, or weightage before approving. Creates an audit trail entry.")
+    public ResponseEntity<GoalDtos.GoalResponse> managerEditGoal(
+            @PathVariable UUID id,
+            @Valid @RequestBody GoalDtos.ManagerEditGoalRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+
+        return ResponseEntity.ok(
+                goalService.managerEditGoal(id, request, principal.getUserId()));
     }
 }

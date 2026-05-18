@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatBadgeModule } from '@angular/material/badge';
 import { AuthService } from '../../core/services/auth.service';
 import { GoalService } from '../../core/services/goal.service';
 import { Goal } from '../../core/models/goal.model';
@@ -14,7 +15,7 @@ import { Goal } from '../../core/models/goal.model';
   standalone: true,
   imports: [
     RouterLink, MatCardModule, MatIconModule,
-    MatButtonModule, MatProgressBarModule, MatChipsModule
+    MatButtonModule, MatProgressBarModule, MatChipsModule, MatBadgeModule
   ],
   template: `
     <div class="dashboard-wrapper">
@@ -54,7 +55,31 @@ import { Goal } from '../../core/models/goal.model';
             <div class="stat-label">Total Weightage</div>
           </mat-card-content>
         </mat-card>
+
+        <!-- Phase 5: Manager pending-to-review badge -->
+        @if (isManagerOrAdmin() && pendingApprovals() > 0) {
+          <mat-card class="stat-card review-alert">
+            <mat-card-content>
+              <div class="stat-value warn">{{ pendingApprovals() }}</div>
+              <div class="stat-label">Awaiting Your Review</div>
+            </mat-card-content>
+          </mat-card>
+        }
       </div>
+
+      <!-- Pending approval alert banner -->
+      @if (isManagerOrAdmin() && pendingApprovals() > 0) {
+        <div class="alert-banner">
+          <mat-icon>notification_important</mat-icon>
+          <span>
+            <strong>{{ pendingApprovals() }} goal{{ pendingApprovals() > 1 ? 's' : '' }}</strong>
+            from your team {{ pendingApprovals() > 1 ? 'are' : 'is' }} awaiting your approval.
+          </span>
+          <button mat-stroked-button routerLink="/goals/team" class="review-btn">
+            <mat-icon>rate_review</mat-icon> Review Now
+          </button>
+        </div>
+      }
 
       <!-- Quick links -->
       <h3 class="section-title">Quick Actions</h3>
@@ -63,7 +88,7 @@ import { Goal } from '../../core/models/goal.model';
           <mat-card-header>
             <mat-icon mat-card-avatar class="icon-goals">flag</mat-icon>
             <mat-card-title>My Goals</mat-card-title>
-            <mat-card-subtitle>Create, edit & submit your goal sheet</mat-card-subtitle>
+            <mat-card-subtitle>Create, edit &amp; submit your goal sheet</mat-card-subtitle>
           </mat-card-header>
         </mat-card>
 
@@ -79,16 +104,27 @@ import { Goal } from '../../core/models/goal.model';
           <mat-card-header>
             <mat-icon mat-card-avatar class="icon-reports">bar_chart</mat-icon>
             <mat-card-title>Reports</mat-card-title>
-            <mat-card-subtitle>Achievement reports & Excel export</mat-card-subtitle>
+            <mat-card-subtitle>Achievement reports &amp; Excel export</mat-card-subtitle>
           </mat-card-header>
         </mat-card>
 
         @if (isManagerOrAdmin()) {
-          <mat-card class="action-card" routerLink="/goals" [queryParams]="{ view: 'team' }">
+          <mat-card class="action-card" routerLink="/goals/team">
             <mat-card-header>
-              <mat-icon mat-card-avatar class="icon-team">group</mat-icon>
-              <mat-card-title>Team Goals</mat-card-title>
-              <mat-card-subtitle>Review & approve your team's goals</mat-card-subtitle>
+              <div class="icon-wrap">
+                <mat-icon mat-card-avatar class="icon-team">rate_review</mat-icon>
+                @if (pendingApprovals() > 0) {
+                  <span class="badge-dot">{{ pendingApprovals() }}</span>
+                }
+              </div>
+              <mat-card-title>Team Review Queue</mat-card-title>
+              <mat-card-subtitle>
+                @if (pendingApprovals() > 0) {
+                  {{ pendingApprovals() }} goal{{ pendingApprovals() > 1 ? 's' : '' }} pending approval
+                } @else {
+                  Review &amp; approve your team's goals
+                }
+              </mat-card-subtitle>
             </mat-card-header>
           </mat-card>
         }
@@ -98,7 +134,7 @@ import { Goal } from '../../core/models/goal.model';
             <mat-card-header>
               <mat-icon mat-card-avatar class="icon-admin">admin_panel_settings</mat-icon>
               <mat-card-title>Admin Panel</mat-card-title>
-              <mat-card-subtitle>Manage cycles, users & org hierarchy</mat-card-subtitle>
+              <mat-card-subtitle>Manage cycles, users &amp; org hierarchy</mat-card-subtitle>
             </mat-card-header>
           </mat-card>
         }
@@ -119,14 +155,27 @@ import { Goal } from '../../core/models/goal.model';
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 16px;
-      margin-bottom: 32px;
+      margin-bottom: 16px;
     }
     .stat-card mat-card-content { padding: 20px 16px; }
     .stat-value { font-size: 2rem; font-weight: 700; color: #1a237e; }
+    .stat-value.warn { color: #e65100; }
     .stat-label { font-size: 13px; color: #666; margin-top: 4px; }
     .stat-card.approved .stat-value { color: #2e7d32; }
     .stat-card.pending  .stat-value { color: #f57f17; }
     .stat-card.weight   .stat-value { color: #6a1b9a; }
+    .stat-card.review-alert { border: 2px solid #ff6d00; }
+
+    /* Alert banner */
+    .alert-banner {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 20px; border-radius: 8px;
+      background: #fff3e0; border: 1px solid #ff6d00;
+      margin-bottom: 24px; flex-wrap: wrap;
+    }
+    .alert-banner mat-icon { color: #e65100; }
+    .alert-banner span { flex: 1; font-size: 14px; }
+    .review-btn { flex-shrink: 0; }
 
     .section-title { margin: 0 0 16px; font-size: 1rem; color: #555; font-weight: 500; }
 
@@ -137,6 +186,15 @@ import { Goal } from '../../core/models/goal.model';
     }
     .action-card { cursor: pointer; transition: box-shadow .2s; }
     .action-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.15); }
+
+    .icon-wrap { position: relative; display: inline-block; }
+    .badge-dot {
+      position: absolute; top: -6px; right: -8px;
+      background: #e53935; color: white;
+      border-radius: 50%; width: 20px; height: 20px;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
 
     .icon-goals   { color: #1a237e; }
     .icon-checkin { color: #2e7d32; }
@@ -150,22 +208,32 @@ export class DashboardComponent implements OnInit {
   auth = inject(AuthService);
   private goalService = inject(GoalService);
 
-  stats = signal({ total: 0, approved: 0, pending: 0, weightage: 0 });
+  stats            = signal({ total: 0, approved: 0, pending: 0, weightage: 0 });
+  pendingApprovals = signal<number>(0);
 
-  isAdmin         = () => this.auth.hasRole('ROLE_ADMIN');
+  isAdmin          = () => this.auth.hasRole('ROLE_ADMIN');
   isManagerOrAdmin = () => this.auth.hasRole('ROLE_ADMIN', 'ROLE_MANAGER');
 
   ngOnInit() {
+    // Load own goal stats
     this.goalService.getMyGoals().subscribe({
       next: goals => {
         this.stats.set({
-          total: goals.length,
+          total:    goals.length,
           approved: goals.filter(g => g.status === 'APPROVED').length,
-          pending: goals.filter(g => g.status === 'PENDING_APPROVAL').length,
-          weightage: goals.reduce((s, g) => s + g.weightage, 0)
+          pending:  goals.filter(g => g.status === 'PENDING_APPROVAL').length,
+          weightage: goals.reduce((s, g) => s + g.weightage, 0),
         });
       },
-      error: () => {}
+      error: () => {},
     });
+
+    // Phase 5: load pending approval count for managers
+    if (this.isManagerOrAdmin()) {
+      this.goalService.getTeamPendingCount().subscribe({
+        next: res => this.pendingApprovals.set(res.count),
+        error: () => {},
+      });
+    }
   }
 }
