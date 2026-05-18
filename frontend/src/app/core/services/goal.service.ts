@@ -1,7 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
-import { Goal, CreateGoalRequest, UpdateGoalRequest } from '../models/goal.model';
+import {
+  Goal,
+  CreateGoalRequest,
+  UpdateGoalRequest,
+  GoalSheetSummary,
+} from '../models/goal.model';
 
 @Injectable({ providedIn: 'root' })
 export class GoalService {
@@ -12,6 +17,12 @@ export class GoalService {
     let params = new HttpParams();
     if (cycleId) params = params.set('cycleId', cycleId);
     return this.http.get<Goal[]>(this.base, { params });
+  }
+
+  getGoalSheetSummary(cycleId?: string) {
+    let params = new HttpParams();
+    if (cycleId) params = params.set('cycleId', cycleId);
+    return this.http.get<GoalSheetSummary>(`${this.base}/summary`, { params });
   }
 
   getTeamGoals(cycleId?: string) {

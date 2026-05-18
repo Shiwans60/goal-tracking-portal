@@ -12,6 +12,8 @@ import java.util.UUID;
 
 public class GoalDtos {
 
+    // ── Inbound ───────────────────────────────────────────────────────────────
+
     @Data
     public static class CreateGoalRequest {
 
@@ -37,7 +39,7 @@ public class GoalDtos {
 
         private LocalDate targetDate;
 
-        @NotNull
+        @NotNull(message = "weightage is required")
         @DecimalMin(value = "10.00", message = "Weightage must be at least 10%")
         @DecimalMax(value = "100.00", message = "Weightage cannot exceed 100%")
         private BigDecimal weightage;
@@ -45,6 +47,7 @@ public class GoalDtos {
 
     @Data
     public static class UpdateGoalRequest {
+
         @Size(max = 255)
         private String thrustArea;
 
@@ -73,26 +76,46 @@ public class GoalDtos {
         private String note;
     }
 
+    // ── Outbound ──────────────────────────────────────────────────────────────
+
     @Data
     public static class GoalResponse {
-        private UUID id;
-        private String employeeId;
-        private String employeeName;
-        private UUID cycleId;
-        private String cycleName;
-        private String thrustArea;
-        private String title;
-        private String description;
-        private UomType uomType;
-        private BigDecimal target;
-        private LocalDate targetDate;
-        private BigDecimal weightage;
-        private GoalStatus status;
-        private boolean locked;
-        private boolean shared;
-        private UUID parentGoalId;
-        private String rejectionNote;
-        private OffsetDateTime createdAt;
-        private OffsetDateTime updatedAt;
+        private UUID            id;
+        private String          employeeId;
+        private String          employeeName;
+        private UUID            cycleId;
+        private String          cycleName;
+        private String          thrustArea;
+        private String          title;
+        private String          description;
+        private UomType         uomType;
+        private BigDecimal      target;
+        private LocalDate       targetDate;
+        private BigDecimal      weightage;
+        private GoalStatus      status;
+        private boolean         locked;
+        private boolean         shared;
+        private UUID            parentGoalId;
+        private String          rejectionNote;
+        private OffsetDateTime  createdAt;
+        private OffsetDateTime  updatedAt;
+    }
+
+    /**
+     * Summary / stats for the employee's goal sheet within a cycle.
+     * Used by the dashboard and the goal-list header bar.
+     */
+    @Data
+    public static class GoalSheetSummary {
+        private int        totalGoals;
+        private BigDecimal totalWeightage;
+        private int        approvedGoals;
+        private int        pendingGoals;
+        private int        draftGoals;
+        private int        reworkGoals;
+        /** true when totalWeightage == 100 */
+        private boolean    weightageComplete;
+        /** true when totalGoals >= 8 */
+        private boolean    maxGoalsReached;
     }
 }

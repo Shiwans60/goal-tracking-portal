@@ -38,6 +38,17 @@ public class GoalController {
         return ResponseEntity.ok(goalService.getMyGoals(principal.getUserId(), cycleId));
     }
 
+    @GetMapping("/summary")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
+    @Operation(summary = "Get goal-sheet summary (totals, weightage, counts) for the active cycle")
+    public ResponseEntity<GoalDtos.GoalSheetSummary> getMySummary(
+            @RequestParam(required = false) UUID cycleId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+
+        return ResponseEntity.ok(
+                goalService.getMyGoalSheetSummary(principal.getUserId(), cycleId));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
     @Operation(summary = "Get a single goal by ID (owner or manager only)")

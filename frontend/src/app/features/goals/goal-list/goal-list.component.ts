@@ -1,5 +1,6 @@
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { TitleCasePipe } from '@angular/common';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -11,13 +12,15 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { GoalService } from '../../../core/services/goal.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { Goal } from '../../../core/models/goal.model';
+import { Goal, GoalSheetSummary } from '../../../core/models/goal.model';
 
 @Component({
   selector: 'app-goal-list',
   standalone: true,
   imports: [
-    RouterLink, MatTableModule, MatButtonModule, MatIconModule,
+    RouterLink,
+    TitleCasePipe,
+    MatTableModule, MatButtonModule, MatIconModule,
     MatChipsModule, MatProgressBarModule, MatCardModule,
     MatTooltipModule, MatTabsModule, MatSnackBarModule
   ],
@@ -36,21 +39,28 @@ import { Goal } from '../../../core/models/goal.model';
         <!-- My Goals Tab -->
         <mat-tab label="My Goals">
           <div class="tab-content">
-            <!-- Weightage summary -->
-            <div class="summary-bar" [class.summary-ok]="totalWeightage() === 100"
-                 [class.summary-warn]="totalWeightage() !== 100 && myGoals().length > 0">
-              <mat-icon>{{ totalWeightage() === 100 ? 'check_circle' : 'warning' }}</mat-icon>
-              <span>Total weightage: <strong>{{ totalWeightage() }}%</strong></span>
-              @if (totalWeightage() !== 100 && myGoals().length > 0) {
-                <span class="hint">· Must equal 100% to be complete</span>
-              }
-              <span class="spacer"></span>
-              <span>{{ myGoals().length }}/8 goals</span>
-            </div>
+            <!-- Weightage / stat summary bar -->
+            @if (summary()) {
+              <div class="summary-bar"
+                   [class.summary-ok]="summary()!.weightageComplete"
+                   [class.summary-warn]="!summary()!.weightageComplete && myGoals().length > 0">
+                <mat-icon>{{ summary()!.weightageComplete ? 'check_circle' : 'warning' }}</mat-icon>
+                <span>Total weightage: <strong>{{ summary()!.totalWeightage }}%</strong></span>
+                @if (!summary()!.weightageComplete && myGoals().length > 0) {
+                  <span class="hint">· Must equal 100% before all goals are submitted</span>
+                }
+                <span class="spacer"></span>
+                <span class="goal-count"
+                      [class.at-max]="summary()!.maxGoalsReached">
+                  {{ myGoals().length }}/8 goals
+                </span>
+              </div>
+            }
 
             <mat-card>
               <mat-card-content>
                 <table mat-table [dataSource]="myGoals()">
+
                   <ng-container matColumnDef="title">
                     <th mat-header-cell *matHeaderCellDef>Goal Title</th>
                     <td mat-cell *matCellDef="let g">
@@ -58,20 +68,26 @@ import { Goal } from '../../../core/models/goal.model';
                       <div class="goal-sub">{{ g.thrustArea }}</div>
                     </td>
                   </ng-container>
+
                   <ng-container matColumnDef="uomType">
                     <th mat-header-cell *matHeaderCellDef>UoM</th>
                     <td mat-cell *matCellDef="let g">{{ uomLabel(g.uomType) }}</td>
                   </ng-container>
+
                   <ng-container matColumnDef="weightage">
                     <th mat-header-cell *matHeaderCellDef>Weight</th>
                     <td mat-cell *matCellDef="let g">{{ g.weightage }}%</td>
                   </ng-container>
+
                   <ng-container matColumnDef="status">
                     <th mat-header-cell *matHeaderCellDef>Status</th>
                     <td mat-cell *matCellDef="let g">
-                      <mat-chip [class]="statusClass(g.status)">{{ g.status | titlecase }}</mat-chip>
+                      <mat-chip [class]="statusClass(g.status)">
+                        {{ g.status | titlecase }}
+                      </mat-chip>
                     </td>
                   </ng-container>
+
                   <ng-container matColumnDef="locked">
                     <th mat-header-cell *matHeaderCellDef>Locked</th>
                     <td mat-cell *matCellDef="let g">
@@ -80,6 +96,7 @@ import { Goal } from '../../../core/models/goal.model';
                       </mat-icon>
                     </td>
                   </ng-container>
+
                   <ng-container matColumnDef="actions">
                     <th mat-header-cell *matHeaderCellDef>Actions</th>
                     <td mat-cell *matCellDef="let g">
@@ -102,9 +119,9 @@ import { Goal } from '../../../core/models/goal.model';
                           <mat-icon>delete</mat-icon>
                         </button>
                       }
-                      @if (g.status === 'REJECTED') {
-                        <span class="rejection-note" [matTooltip]="g.rejectionNote ?? ''">
-                          <mat-icon color="warn">info</mat-icon>
+                      @if (g.status === 'REJECTED' && g.rejectionNote) {
+                        <span [matTooltip]="g.rejectionNote">
+                          <mat-icon color="warn" style="cursor:default">info</mat-icon>
                         </span>
                       }
                     </td>
@@ -158,7 +175,9 @@ import { Goal } from '../../../core/models/goal.model';
                     <ng-container matColumnDef="status">
                       <th mat-header-cell *matHeaderCellDef>Status</th>
                       <td mat-cell *matCellDef="let g">
-                        <mat-chip [class]="statusClass(g.status)">{{ g.status | titlecase }}</mat-chip>
+                        <mat-chip [class]="statusClass(g.status)">
+                          {{ g.status | titlecase }}
+                        </mat-chip>
                       </td>
                     </ng-container>
 
@@ -194,15 +213,15 @@ import { Goal } from '../../../core/models/goal.model';
       background: #f5f5f5;
     }
     .summary-bar mat-icon { font-size: 18px; height: 18px; width: 18px; }
-    .summary-ok  { background: #e8f5e9; color: #2e7d32; }
+    .summary-ok   { background: #e8f5e9; color: #2e7d32; }
     .summary-warn { background: #fff8e1; color: #f57f17; }
     .spacer { flex: 1; }
     .hint { color: #888; }
+    .goal-count.at-max { color: #c62828; font-weight: 700; }
 
     table { width: 100%; }
     .goal-title { font-weight: 500; }
     .goal-sub { font-size: 12px; color: #888; }
-    .rejection-note { cursor: default; display: inline-flex; align-items: center; }
 
     .chip-draft            { background: #e3f2fd; }
     .chip-pending_approval { background: #fff8e1; }
@@ -223,6 +242,7 @@ export class GoalListComponent implements OnInit {
 
   myGoals   = signal<Goal[]>([]);
   teamGoals = signal<Goal[]>([]);
+  summary   = signal<GoalSheetSummary | null>(null);
   loading   = signal(true);
 
   myColumns   = ['title', 'uomType', 'weightage', 'status', 'locked', 'actions'];
@@ -230,13 +250,16 @@ export class GoalListComponent implements OnInit {
 
   isManagerOrAdmin = () => this.auth.hasRole('ROLE_MANAGER', 'ROLE_ADMIN');
 
-  totalWeightage = () =>
-    this.myGoals().reduce((sum, g) => sum + g.weightage, 0);
-
   ngOnInit() {
     this.goalService.getMyGoals().subscribe({
       next: data => { this.myGoals.set(data); this.loading.set(false); },
       error: ()   => this.loading.set(false)
+    });
+
+    // Load summary for weightage bar
+    this.goalService.getGoalSheetSummary().subscribe({
+      next: s => this.summary.set(s),
+      error: () => {}
     });
 
     if (this.isManagerOrAdmin()) {
@@ -251,9 +274,12 @@ export class GoalListComponent implements OnInit {
     this.goalService.submitGoal(id).subscribe({
       next: updated => {
         this.myGoals.update(gs => gs.map(g => g.id === id ? updated : g));
+        this.goalService.getGoalSheetSummary().subscribe(s => this.summary.set(s));
         this.snack.open('Goal submitted for approval!', 'OK', { duration: 3000 });
       },
-      error: (err) => this.snack.open(err?.error?.detail ?? 'Submit failed', 'Dismiss', { duration: 4000 })
+      error: (err) => this.snack.open(
+        err?.error?.detail ?? err?.error?.message ?? 'Submit failed',
+        'Dismiss', { duration: 5000 })
     });
   }
 
@@ -262,6 +288,7 @@ export class GoalListComponent implements OnInit {
     this.goalService.deleteGoal(id).subscribe({
       next: () => {
         this.myGoals.update(gs => gs.filter(g => g.id !== id));
+        this.goalService.getGoalSheetSummary().subscribe(s => this.summary.set(s));
         this.snack.open('Goal deleted', 'OK', { duration: 3000 });
       },
       error: () => this.snack.open('Delete failed', 'Dismiss', { duration: 4000 })
@@ -278,6 +305,6 @@ export class GoalListComponent implements OnInit {
   }
 
   statusClass(status: string): string {
-    return `chip-${status.toLowerCase()}`;
+    return `chip-${status.toLowerCase().replace(/_/g, '_')}`;
   }
 }
