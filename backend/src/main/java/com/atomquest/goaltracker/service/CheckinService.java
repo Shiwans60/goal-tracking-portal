@@ -15,8 +15,7 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,7 +29,63 @@ public class CheckinService {
     private final CycleRepository          cycleRepository;
     private final UserRepository           userRepository;
 
-    // ── Queries ───────────────────────────────────────────────────────────────
+    // ── Primary view: Goals merged with check-in status ──────────────────────
+
+    /**
+     * Returns ALL approved goals for the employee, each enriched with the
+     * check-in entry for the requested quarter (if one already exists).
+     */
+    @Transactional(readOnly = true)
+    public List<CheckinDtos.GoalCheckinView> getGoalsWithCheckins(
+            String userId, UUID cycleId, Quarter quarter) {
+
+        UUID uid = UUID.fromString(userId);
+        UUID cid = resolveCycleId(cycleId);
+
+        // All APPROVED goals for the employee in the cycle
+        List<Goal> goals = goalRepository.findByEmployeeIdAndCycleId(uid, cid)
+                .stream()
+                .filter(g -> g.getStatus() == GoalStatus.APPROVED)
+                .collect(Collectors.toList());
+
+        // Build a map of goalId → existing check-in
+        Map<UUID, Checkin> checkinMap = checkinRepository
+                .findByEmployeeAndCycleAndQuarter(uid, cid, quarter)
+                .stream()
+                .collect(Collectors.toMap(c -> c.getGoal().getId(), c -> c));
+
+        return goals.stream()
+                .map(g -> toGoalCheckinView(g, checkinMap.get(g.getId()), quarter))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Manager view: all direct-report approved goals with check-in status merged.
+     */
+    @Transactional(readOnly = true)
+    public List<CheckinDtos.GoalCheckinView> getTeamGoalsWithCheckins(
+            String managerId, UUID cycleId, Quarter quarter) {
+
+        UUID mgr = UUID.fromString(managerId);
+        UUID cid = resolveCycleId(cycleId);
+
+        // All APPROVED goals for the manager's direct reports
+        List<Goal> goals = goalRepository.findTeamGoalsByCycle(mgr, cid)
+                .stream()
+                .filter(g -> g.getStatus() == GoalStatus.APPROVED)
+                .collect(Collectors.toList());
+
+        // Collect check-ins for the quarter
+        List<Checkin> teamCheckins = checkinRepository.findTeamCheckins(mgr, cid, quarter);
+        Map<UUID, Checkin> checkinMap = teamCheckins.stream()
+                .collect(Collectors.toMap(c -> c.getGoal().getId(), c -> c));
+
+        return goals.stream()
+                .map(g -> toGoalCheckinView(g, checkinMap.get(g.getId()), quarter))
+                .collect(Collectors.toList());
+    }
+
+    // ── Legacy check-in list queries ──────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<CheckinDtos.CheckinResponse> getMyCheckins(
@@ -44,7 +99,6 @@ public class CheckinService {
         } else if (cycleId != null) {
             checkins = checkinRepository.findByEmployeeAndCycle(uid, cycleId);
         } else {
-            // Fall back to active cycle
             Cycle active = cycleRepository
                     .findFirstByStatusOrderByStartDateDesc(CycleStatus.ACTIVE)
                     .orElseThrow(() -> new BusinessException("No active cycle found"));
@@ -83,14 +137,18 @@ public class CheckinService {
         if (goal.getStatus() != GoalStatus.APPROVED) {
             throw new BusinessException("Check-ins can only be logged for APPROVED goals");
         }
-        if (!goal.getEmployee().getId().toString().equals(userId)) {
-            // Managers can also log on behalf — relaxed check handled by role at controller
-            // Just ensure it's the employee's own goal or their manager
-        }
 
-        Cycle cycle  = goal.getCycle();
-        User  user   = userRepository.findById(UUID.fromString(userId))
+        Cycle cycle = goal.getCycle();
+        User  user  = userRepository.findById(UUID.fromString(userId))
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        // Verify ownership or manager relationship
+        boolean isOwner   = goal.getEmployee().getId().toString().equals(userId);
+        boolean isManager = user.getRole() == UserRole.ROLE_MANAGER
+                || user.getRole() == UserRole.ROLE_ADMIN;
+        if (!isOwner && !isManager) {
+            throw new BusinessException("You cannot log a check-in for this goal");
+        }
 
         Checkin checkin = checkinRepository
                 .findByGoalIdAndQuarterAndCycleId(goalId, q, cycle.getId())
@@ -106,7 +164,6 @@ public class CheckinService {
         checkin.setSubmittedBy(user);
         checkin.setCheckedAt(OffsetDateTime.now());
 
-        // Compute progress score from BRD formulas
         BigDecimal score = computeScore(goal, req);
         checkin.setProgressScore(score);
 
@@ -128,8 +185,7 @@ public class CheckinService {
                 .comment(req.getComment())
                 .build();
 
-        CheckinComment saved = commentRepository.save(comment);
-        return toCommentResponse(saved);
+        return toCommentResponse(commentRepository.save(comment));
     }
 
     @Transactional(readOnly = true)
@@ -141,50 +197,96 @@ public class CheckinService {
     // ── BRD Progress Score Formulas ───────────────────────────────────────────
 
     /**
-     * Returns a score in [0, 1] range.
-     * Formulae from BRD section 2.2:
-     *   NUMERIC_MIN / PERCENTAGE_MIN  → achievement ÷ target
-     *   NUMERIC_MAX / PERCENTAGE_MAX  → target ÷ achievement
-     *   TIMELINE                      → based on completion date vs target date
+     * Phase 8 — BRD §2.2 formulas.  Returns a score in [0, 1].
+     *   NUMERIC_MIN / PERCENTAGE_MIN  → achievement ÷ target          (higher better)
+     *   NUMERIC_MAX / PERCENTAGE_MAX  → target ÷ achievement           (lower better)
+     *   TIMELINE                      → score based on completion date vs deadline
      *   ZERO_BASED                    → 1.0 if achievement == 0, else 0.0
      */
-    private BigDecimal computeScore(Goal goal, CheckinDtos.UpsertCheckinRequest req) {
+    public BigDecimal computeScore(Goal goal, CheckinDtos.UpsertCheckinRequest req) {
         if (req.getAchievement() == null && req.getCompletionDate() == null) {
             return null;
         }
-        BigDecimal ONE = BigDecimal.ONE;
         MathContext mc = new MathContext(8, RoundingMode.HALF_UP);
+        BigDecimal ONE = BigDecimal.ONE;
 
         return switch (goal.getUomType()) {
             case NUMERIC_MIN, PERCENTAGE_MIN -> {
-                if (goal.getTarget() == null || goal.getTarget().compareTo(BigDecimal.ZERO) == 0) yield null;
+                if (goal.getTarget() == null || goal.getTarget().compareTo(BigDecimal.ZERO) == 0)
+                    yield null;
                 BigDecimal raw = req.getAchievement().divide(goal.getTarget(), mc);
-                yield raw.min(ONE).max(BigDecimal.ZERO);
+                yield raw.min(ONE).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
             }
             case NUMERIC_MAX, PERCENTAGE_MAX -> {
-                if (req.getAchievement() == null || req.getAchievement().compareTo(BigDecimal.ZERO) == 0) yield null;
+                if (req.getAchievement() == null
+                        || req.getAchievement().compareTo(BigDecimal.ZERO) == 0)
+                    yield null;
                 if (goal.getTarget() == null) yield null;
                 BigDecimal raw = goal.getTarget().divide(req.getAchievement(), mc);
-                yield raw.min(ONE).max(BigDecimal.ZERO);
+                yield raw.min(ONE).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
             }
             case TIMELINE -> {
                 if (goal.getTargetDate() == null || req.getCompletionDate() == null) yield null;
-                long targetDays     = ChronoUnit.DAYS.between(goal.getCreatedAt().toLocalDate(), goal.getTargetDate());
-                long completionDays = ChronoUnit.DAYS.between(goal.getCreatedAt().toLocalDate(), req.getCompletionDate());
+                long targetDays     = ChronoUnit.DAYS.between(
+                        goal.getCreatedAt().toLocalDate(), goal.getTargetDate());
+                long completionDays = ChronoUnit.DAYS.between(
+                        goal.getCreatedAt().toLocalDate(), req.getCompletionDate());
                 if (targetDays <= 0) yield ONE;
                 BigDecimal ratio = BigDecimal.valueOf(completionDays)
                         .divide(BigDecimal.valueOf(targetDays), mc);
-                // Score = 1 when completed on time or earlier; proportionally less if late
-                yield ratio.compareTo(ONE) <= 0 ? ONE : BigDecimal.ONE.divide(ratio, mc).setScale(4, RoundingMode.HALF_UP);
+                // On-time or early = 1.0; proportionally less if late
+                yield ratio.compareTo(ONE) <= 0
+                        ? ONE
+                        : ONE.divide(ratio, mc).setScale(4, RoundingMode.HALF_UP);
             }
             case ZERO_BASED -> {
                 if (req.getAchievement() == null) yield null;
-                yield req.getAchievement().compareTo(BigDecimal.ZERO) == 0 ? ONE : BigDecimal.ZERO;
+                yield req.getAchievement().compareTo(BigDecimal.ZERO) == 0
+                        ? ONE : BigDecimal.ZERO;
             }
         };
     }
 
     // ── Mappers ───────────────────────────────────────────────────────────────
+
+    private CheckinDtos.GoalCheckinView toGoalCheckinView(Goal g, Checkin c, Quarter quarter) {
+        CheckinDtos.GoalCheckinView v = new CheckinDtos.GoalCheckinView();
+
+        // Goal fields
+        v.setGoalId(g.getId());
+        v.setGoalTitle(g.getTitle());
+        v.setThrustArea(g.getThrustArea());
+        v.setUomType(g.getUomType());
+        v.setTarget(g.getTarget());
+        v.setTargetDate(g.getTargetDate());
+        v.setWeightage(g.getWeightage());
+        v.setGoalStatus(g.getStatus());
+        v.setGoalLocked(g.isLocked());
+        v.setShared(g.isShared());
+        v.setEmployeeId(g.getEmployee().getId().toString());
+        v.setEmployeeName(g.getEmployee().getName());
+        v.setCycleId(g.getCycle().getId());
+        v.setCycleName(g.getCycle().getName());
+        v.setQuarter(quarter.name());
+
+        // Check-in fields
+        if (c != null) {
+            v.setCheckinId(c.getId());
+            v.setHasCheckin(true);
+            v.setAchievement(c.getAchievement());
+            v.setCompletionDate(c.getCompletionDate());
+            v.setProgress(c.getProgress());
+            v.setProgressScore(c.getProgressScore());
+            v.setCheckedAt(c.getCheckedAt());
+            v.setCheckinCreatedAt(c.getCreatedAt());
+            v.setCheckinUpdatedAt(c.getUpdatedAt());
+        } else {
+            v.setHasCheckin(false);
+            v.setProgress(GoalProgress.NOT_STARTED);
+        }
+
+        return v;
+    }
 
     private CheckinDtos.CheckinResponse toResponse(Checkin c) {
         CheckinDtos.CheckinResponse r = new CheckinDtos.CheckinResponse();

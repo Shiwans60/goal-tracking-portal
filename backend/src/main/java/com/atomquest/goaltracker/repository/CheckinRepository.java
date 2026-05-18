@@ -38,4 +38,22 @@ public interface CheckinRepository extends JpaRepository<Checkin, UUID> {
             @Param("managerId") UUID managerId,
             @Param("cycleId")   UUID cycleId,
             @Param("quarter")   Quarter quarter);
+
+    /**
+     * Phase 8 — Count distinct employees (direct reports of manager) who have
+     * at least one check-in in the given cycle and quarter.
+     */
+    @Query("SELECT COUNT(DISTINCT c.goal.employee.id) FROM Checkin c " +
+            "WHERE c.goal.employee.manager.id = :managerId " +
+            "AND c.cycle.id = :cycleId AND c.quarter = :quarter")
+    long countDistinctEmployeesWithCheckin(
+            @Param("managerId") UUID managerId,
+            @Param("cycleId")   UUID cycleId,
+            @Param("quarter")   Quarter quarter);
+
+    /**
+     * Phase 8 — All check-ins across the whole org for a given cycle.
+     */
+    @Query("SELECT c FROM Checkin c WHERE c.cycle.id = :cycleId")
+    List<Checkin> findAllByCycleId(@Param("cycleId") UUID cycleId);
 }

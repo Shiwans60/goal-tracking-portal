@@ -1,7 +1,8 @@
 package com.atomquest.goaltracker.dto.checkin;
 
 import com.atomquest.goaltracker.entity.GoalProgress;
-import jakarta.validation.constraints.DecimalMin;
+import com.atomquest.goaltracker.entity.GoalStatus;
+import com.atomquest.goaltracker.entity.UomType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -61,5 +62,45 @@ public class CheckinDtos {
         private String authorName;
         private String comment;
         private OffsetDateTime createdAt;
+    }
+
+    /**
+     * Phase 7 — GoalCheckinView.
+     *
+     * Represents a single row in the check-in list: the goal details plus
+     * the check-in entry for the requested quarter (null fields if no check-in
+     * has been logged yet).  This allows the frontend to show all approved goals
+     * in one call without two separate fetches.
+     */
+    @Data
+    public static class GoalCheckinView {
+        // ── Goal fields ───────────────────────────────────────────────────────
+        private UUID          goalId;
+        private String        goalTitle;
+        private String        thrustArea;
+        private UomType       uomType;
+        private BigDecimal    target;
+        private LocalDate     targetDate;
+        private BigDecimal    weightage;
+        private GoalStatus    goalStatus;
+        private boolean       goalLocked;
+        private boolean       isShared;
+        private String        employeeId;
+        private String        employeeName;
+        private UUID          cycleId;
+        private String        cycleName;
+
+        // ── Check-in fields (null when no check-in logged yet) ────────────────
+        private UUID          checkinId;
+        private String        quarter;
+        /** true when a check-in already exists for this goal+quarter */
+        private boolean       hasCheckin;
+        private BigDecimal    achievement;
+        private LocalDate     completionDate;
+        private GoalProgress  progress;
+        private BigDecimal    progressScore;
+        private OffsetDateTime checkedAt;
+        private OffsetDateTime checkinCreatedAt;
+        private OffsetDateTime checkinUpdatedAt;
     }
 }

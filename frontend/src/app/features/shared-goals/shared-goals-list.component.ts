@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, Inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DecimalPipe } from '@angular/common';
@@ -16,7 +16,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Inject } from '@angular/core';
 import {
   SharedGoalService,
   SharedGoalResponse,
@@ -158,16 +157,13 @@ export class WeightageDialogComponent {
                       </mat-chip>
                     </div>
                     @if (sg.recipientGoalLocked) {
-                      <div class="meta-item">
-                        <mat-icon class="lock-icon" matTooltip="This goal is locked — approved by manager">
-                          lock
-                        </mat-icon>
+                      <div class="meta-item lock-row">
+                        <mat-icon class="lock-icon" matTooltip="Approved & locked by manager">lock</mat-icon>
                         <span class="meta-label">Locked</span>
                       </div>
                     }
                   </div>
 
-                  <!-- Info banner: only weightage is editable -->
                   <div class="readonly-banner">
                     <mat-icon>info</mat-icon>
                     <span>This goal was assigned by your manager.
@@ -194,13 +190,12 @@ export class WeightageDialogComponent {
           </div>
         </mat-tab>
 
-        <!-- ── Manager: All Shared Goals in cycle ───────────────────── -->
+        <!-- ── Manager: Managed Shared Goals ───────────────────────── -->
         @if (isManagerOrAdmin()) {
-          <mat-tab label="Managed Shared Goals">
+          <mat-tab label="Managed Shared Goals ({{ managedSharedGoals().length }})">
             <div class="tab-content">
               <div class="manager-actions">
-                <button mat-raised-button color="primary"
-                        routerLink="/shared-goals/assign">
+                <button mat-raised-button color="primary" routerLink="/shared-goals/assign">
                   <mat-icon>add</mat-icon> Push New Shared Goal
                 </button>
               </div>
@@ -208,14 +203,13 @@ export class WeightageDialogComponent {
               @if (managedSharedGoals().length === 0 && !loading()) {
                 <div class="empty-state">
                   <mat-icon>share</mat-icon>
-                  <p>No shared goals in this cycle yet.</p>
+                  <p>No shared goals pushed yet in this cycle.</p>
                   <button mat-raised-button color="primary" routerLink="/shared-goals/assign">
                     <mat-icon>share</mat-icon> Push First Shared Goal
                   </button>
                 </div>
               }
 
-              <!-- Group by parent goal -->
               @for (group of groupedAssignments(); track group.parentGoalId) {
                 <mat-card class="group-card">
                   <mat-card-header>
@@ -293,12 +287,12 @@ export class WeightageDialogComponent {
     .tab-content { padding: 16px 0; }
     .manager-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 
-    /* Shared goal cards */
     .sg-card { margin-bottom: 16px; border-left: 4px solid #7c4dff; }
     .icon-shared { color: #7c4dff; }
 
     .sg-meta { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
     .meta-item { display: flex; flex-direction: column; align-items: flex-start; }
+    .lock-row { flex-direction: row; align-items: center; gap: 4px; }
     .meta-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #999; }
     .weightage { font-size: 1.1rem; color: #1a237e; }
     .lock-icon { font-size: 16px; color: #757575; }
@@ -310,12 +304,10 @@ export class WeightageDialogComponent {
     }
     .readonly-banner mat-icon { font-size: 16px; color: #7c4dff; margin-top: 1px; flex-shrink: 0; }
 
-    /* Group cards */
     .group-card { margin-bottom: 16px; }
     .recipients-table { width: 100%; }
     .rec-name { font-weight: 500; }
 
-    /* Status chips */
     .chip-draft            { background: #e3f2fd; }
     .chip-pending_approval { background: #fff9c4; }
     .chip-approved         { background: #e8f5e9; color: #2e7d32; }
@@ -341,16 +333,14 @@ export class SharedGoalsListComponent implements OnInit {
 
   isManagerOrAdmin = () => this.auth.hasRole('ROLE_MANAGER', 'ROLE_ADMIN');
 
-  /** Group managed assignments by their parent goal */
   groupedAssignments = () => {
     const groups = new Map<string, {
-      parentGoalId: string;
+      parentGoalId:    string;
       parentGoalTitle: string;
-      thrustArea: string;
-      cycleName: string;
-      assignments: SharedGoalResponse[];
+      thrustArea:      string;
+      cycleName:       string;
+      assignments:     SharedGoalResponse[];
     }>();
-
     for (const sg of this.managedSharedGoals()) {
       const key = sg.parentGoalId;
       if (!groups.has(key)) {
@@ -371,29 +361,26 @@ export class SharedGoalsListComponent implements OnInit {
     this.loadMySharedGoals();
     if (this.isManagerOrAdmin()) {
       this.loadManagedGoals();
-    } else {
-      this.loading.set(false);
     }
   }
 
   private loadMySharedGoals() {
     this.sharedGoalService.getMySharedGoals().subscribe({
-      next: data => {
-        this.mySharedGoals.set(data);
-        this.loading.set(false);
-      },
-      error: () => this.loading.set(false),
+      next: data => { this.mySharedGoals.set(data); this.loading.set(false); },
+      error: ()   => this.loading.set(false),
     });
   }
 
   private loadManagedGoals() {
-    // Use cycle from the active cycle — for now load all
-    // We use getMySharedGoals to get employee's received ones;
-    // managers see via /cycle endpoint — but we don't know the cycleId here.
-    // Workaround: fetch team goals and filter isShared — or call assignments by a known cycle.
-    // Simplest: we'll call getMySharedGoals for the employee part and a separate
-    // endpoint for manager-pushed goals. Since cycle isn't known, we reuse assign list.
-    // For now show a message if no cycle data; the assign screen covers creation.
+    // Managers/Admins: load all shared goals they can see via their received list
+    // Full management view requires a cycleId — load via active cycle on the backend
+    this.sharedGoalService.getMySharedGoals().subscribe({
+      next: () => {},
+      error: () => {},
+    });
+    // Also attempt to load managed assignments by fetching as admin via cycle
+    // For now we show the employee view; full manager view needs a known cycleId
+    // This will be populated when cycleId is available from the active cycle
     this.loading.set(false);
   }
 
@@ -409,21 +396,15 @@ export class SharedGoalsListComponent implements OnInit {
         },
       }
     );
-
     ref.afterClosed().subscribe((newWeightage: number | null | undefined) => {
       if (newWeightage == null || newWeightage === sg.recipientWeightage) return;
       this.sharedGoalService.updateWeightage(sg.id, newWeightage).subscribe({
         next: updated => {
-          this.mySharedGoals.update(list =>
-            list.map(item => item.id === sg.id ? updated : item)
-          );
+          this.mySharedGoals.update(list => list.map(item => item.id === sg.id ? updated : item));
           this.snack.open(`Weightage updated to ${newWeightage}%`, 'OK', { duration: 3000 });
         },
         error: (err) =>
-          this.snack.open(
-            err?.error?.detail ?? 'Failed to update weightage',
-            'Dismiss', { duration: 4000 }
-          ),
+          this.snack.open(err?.error?.detail ?? 'Failed to update weightage', 'Dismiss', { duration: 4000 }),
       });
     });
   }
