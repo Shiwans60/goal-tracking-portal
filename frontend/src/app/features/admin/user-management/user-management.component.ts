@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, signal, computed, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
@@ -10,13 +10,16 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDividerModule } from '@angular/material/divider';
 import { UserService, AdminUserResponse } from '../../../core/services/user.service';
 
-/* ── Role change dialog ─────────────────────────────────────────────── */
+// ── Role Dialog ──────────────────────────────────────────────────────────────
+
+export interface RoleDialogData { name: string; email: string; currentRole: string; }
+
 @Component({
   selector: 'app-role-dialog',
   standalone: true,
@@ -35,23 +38,31 @@ import { UserService, AdminUserResponse } from '../../../core/services/user.serv
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-stroked-button mat-dialog-close>Cancel</button>
+      <button mat-stroked-button [mat-dialog-close]="null">Cancel</button>
       <button mat-raised-button color="primary" [mat-dialog-close]="selectedRole">Save</button>
     </mat-dialog-actions>
   `,
   styles: ['.user-info { color: #666; margin-bottom: 16px; }']
 })
 export class RoleDialogComponent {
-  data: { name: string; email: string; currentRole: string } =
-    inject(MatDialogRef).componentInstance.data ?? { name: '', email: '', currentRole: 'ROLE_EMPLOYEE' };
-  selectedRole = this.data.currentRole;
-  constructor() {
-    this.data = (inject(MatDialogRef) as any)._containerInstance._config.data;
-    this.selectedRole = this.data.currentRole;
+  selectedRole: string;
+  constructor(
+    @Inject(MAT_DIALOG_DATA) public data: RoleDialogData,
+    public dialogRef: MatDialogRef<RoleDialogComponent>
+  ) {
+    this.selectedRole = data.currentRole;
   }
 }
 
-/* ── Manager assignment dialog ───────────────────────────────────────── */
+// ── Manager Dialog ───────────────────────────────────────────────────────────
+
+export interface ManagerDialogData {
+  name: string;
+  userId: string;
+  currentManagerId: string | null;
+  managers: AdminUserResponse[];
+}
+
 @Component({
   selector: 'app-manager-dialog',
   standalone: true,
@@ -73,23 +84,24 @@ export class RoleDialogComponent {
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-stroked-button mat-dialog-close>Cancel</button>
+      <button mat-stroked-button [mat-dialog-close]="undefined">Cancel</button>
       <button mat-raised-button color="primary" [mat-dialog-close]="selectedManagerId">Save</button>
     </mat-dialog-actions>
   `,
   styles: ['.user-info { color: #666; margin-bottom: 16px; }']
 })
 export class ManagerDialogComponent {
-  data: { name: string; userId: string; currentManagerId: string | null; managers: AdminUserResponse[] } =
-    { name: '', userId: '', currentManagerId: null, managers: [] };
-  selectedManagerId: string | null = null;
-  constructor() {
-    this.data = (inject(MatDialogRef) as any)._containerInstance._config.data;
-    this.selectedManagerId = this.data.currentManagerId ?? null;
+  selectedManagerId: string | null;
+  constructor(
+    @Inject(MAT_DIALOG_DATA) public data: ManagerDialogData,
+    public dialogRef: MatDialogRef<ManagerDialogComponent>
+  ) {
+    this.selectedManagerId = data.currentManagerId ?? null;
   }
 }
 
-/* ── Main component ──────────────────────────────────────────────────── */
+// ── Main Component ───────────────────────────────────────────────────────────
+
 @Component({
   selector: 'app-user-management',
   standalone: true,
@@ -143,8 +155,6 @@ export class ManagerDialogComponent {
       <mat-card>
         <mat-card-content>
           <table mat-table [dataSource]="filteredUsers()">
-
-            <!-- Name / email -->
             <ng-container matColumnDef="name">
               <th mat-header-cell *matHeaderCellDef>User</th>
               <td mat-cell *matCellDef="let u">
@@ -158,19 +168,16 @@ export class ManagerDialogComponent {
               </td>
             </ng-container>
 
-            <!-- Department -->
             <ng-container matColumnDef="department">
               <th mat-header-cell *matHeaderCellDef>Department</th>
               <td mat-cell *matCellDef="let u">{{ u.department ?? '—' }}</td>
             </ng-container>
 
-            <!-- Manager -->
             <ng-container matColumnDef="manager">
               <th mat-header-cell *matHeaderCellDef>Manager</th>
               <td mat-cell *matCellDef="let u">{{ u.managerName ?? '—' }}</td>
             </ng-container>
 
-            <!-- Role -->
             <ng-container matColumnDef="role">
               <th mat-header-cell *matHeaderCellDef>Role</th>
               <td mat-cell *matCellDef="let u">
@@ -178,7 +185,6 @@ export class ManagerDialogComponent {
               </td>
             </ng-container>
 
-            <!-- Active toggle -->
             <ng-container matColumnDef="active">
               <th mat-header-cell *matHeaderCellDef>Active</th>
               <td mat-cell *matCellDef="let u">
@@ -190,24 +196,20 @@ export class ManagerDialogComponent {
               </td>
             </ng-container>
 
-            <!-- Actions -->
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef>Actions</th>
               <td mat-cell *matCellDef="let u">
-                <button mat-icon-button matTooltip="Change role"
-                        (click)="openRoleDialog(u)">
+                <button mat-icon-button matTooltip="Change role" (click)="openRoleDialog(u)">
                   <mat-icon>manage_accounts</mat-icon>
                 </button>
-                <button mat-icon-button matTooltip="Assign manager"
-                        (click)="openManagerDialog(u)">
+                <button mat-icon-button matTooltip="Assign manager" (click)="openManagerDialog(u)">
                   <mat-icon>supervisor_account</mat-icon>
                 </button>
               </td>
             </ng-container>
 
             <tr mat-header-row *matHeaderRowDef="columns; sticky: true"></tr>
-            <tr mat-row *matRowDef="let row; columns: columns;"
-                [class.inactive-row]="!row.active"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns;" [class.inactive-row]="!row.active"></tr>
           </table>
 
           @if (filteredUsers().length === 0 && !loading()) {
@@ -249,7 +251,7 @@ export class ManagerDialogComponent {
 
     .empty-state { text-align: center; padding: 48px; color: #999; }
     .empty-state mat-icon { font-size: 48px; display: block; }
-  `],
+  `]
 })
 export class UserManagementComponent implements OnInit {
   private userService = inject(UserService);
@@ -268,7 +270,7 @@ export class UserManagementComponent implements OnInit {
   activeCount = computed(() => this.users().filter(u => u.active).length);
 
   filteredUsers = computed(() => {
-    const q    = this.searchQuery.toLowerCase();
+    const q = this.searchQuery.toLowerCase();
     return this.users().filter(u => {
       const matchSearch = !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
       const matchRole   = !this.roleFilter || u.role === this.roleFilter;
@@ -277,9 +279,7 @@ export class UserManagementComponent implements OnInit {
     });
   });
 
-  ngOnInit() {
-    this.loadUsers();
-  }
+  ngOnInit() { this.loadUsers(); }
 
   loadUsers() {
     this.loading.set(true);
@@ -289,13 +289,12 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
-  /* ── Role dialog ────────────────────────────────────────────────── */
   openRoleDialog(user: AdminUserResponse) {
     const ref = this.dialog.open(RoleDialogComponent, {
       width: '380px',
-      data: { name: user.name, email: user.email, currentRole: user.role },
+      data: { name: user.name, email: user.email, currentRole: user.role } satisfies RoleDialogData,
     });
-    ref.afterClosed().subscribe(newRole => {
+    ref.afterClosed().subscribe((newRole: string | null) => {
       if (!newRole || newRole === user.role) return;
       this.userService.updateRole(user.id, newRole).subscribe({
         next: updated => {
@@ -307,7 +306,6 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
-  /* ── Manager dialog ─────────────────────────────────────────────── */
   openManagerDialog(user: AdminUserResponse) {
     const managers = this.users().filter(u => u.role !== 'ROLE_EMPLOYEE' && u.id !== user.id);
     const ref = this.dialog.open(ManagerDialogComponent, {
@@ -317,9 +315,9 @@ export class UserManagementComponent implements OnInit {
         userId: user.id,
         currentManagerId: user.managerId ?? null,
         managers,
-      },
+      } satisfies ManagerDialogData,
     });
-    ref.afterClosed().subscribe(managerId => {
+    ref.afterClosed().subscribe((managerId: string | null | undefined) => {
       if (managerId === undefined) return; // cancelled
       this.userService.updateManager(user.id, managerId).subscribe({
         next: updated => {
@@ -331,7 +329,6 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
-  /* ── Toggle active ──────────────────────────────────────────────── */
   toggleActive(user: AdminUserResponse, active: boolean) {
     this.userService.toggleActive(user.id, active).subscribe({
       next: () =>
@@ -341,10 +338,10 @@ export class UserManagementComponent implements OnInit {
   }
 
   friendlyRole(role: string): string {
-    return ({ ROLE_EMPLOYEE: 'Employee', ROLE_MANAGER: 'Manager', ROLE_ADMIN: 'Admin' })[role] ?? role;
+    return ({ ROLE_EMPLOYEE: 'Employee', ROLE_MANAGER: 'Manager', ROLE_ADMIN: 'Admin' }[role]) ?? role;
   }
 
   roleClass(role: string): string {
-    return ({ ROLE_EMPLOYEE: 'chip-employee', ROLE_MANAGER: 'chip-manager', ROLE_ADMIN: 'chip-admin' })[role] ?? '';
+    return ({ ROLE_EMPLOYEE: 'chip-employee', ROLE_MANAGER: 'chip-manager', ROLE_ADMIN: 'chip-admin' }[role]) ?? '';
   }
 }

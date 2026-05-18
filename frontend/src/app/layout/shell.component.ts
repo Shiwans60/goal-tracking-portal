@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, HostListener } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -8,7 +8,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { AuthService } from '../../core/services/auth.service';
+import { AuthService } from '../core/services/auth.service';
 
 interface NavItem {
   label: string;
@@ -18,17 +18,17 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',  icon: 'dashboard',           route: '/dashboard' },
-  { label: 'My Goals',   icon: 'flag',                route: '/goals' },
-  { label: 'Check-ins',  icon: 'event_available',     route: '/checkins' },
-  { label: 'Reports',    icon: 'bar_chart',            route: '/reports' },
-  { label: 'Profile',    icon: 'person',              route: '/profile' },
+  { label: 'Dashboard',  icon: 'dashboard',        route: '/dashboard' },
+  { label: 'My Goals',   icon: 'flag',             route: '/goals' },
+  { label: 'Check-ins',  icon: 'event_available',  route: '/checkins' },
+  { label: 'Reports',    icon: 'bar_chart',         route: '/reports' },
+  { label: 'Profile',    icon: 'person',           route: '/profile' },
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
-  { label: 'Users',      icon: 'manage_accounts',     route: '/admin/users',     roles: ['ROLE_ADMIN'] },
-  { label: 'Org Chart',  icon: 'account_tree',        route: '/admin/org-chart', roles: ['ROLE_ADMIN', 'ROLE_MANAGER'] },
-  { label: 'Cycles',     icon: 'date_range',          route: '/admin/cycles',    roles: ['ROLE_ADMIN'] },
+  { label: 'Users',     icon: 'manage_accounts', route: '/admin/users',     roles: ['ROLE_ADMIN'] },
+  { label: 'Org Chart', icon: 'account_tree',    route: '/admin/org-chart', roles: ['ROLE_ADMIN', 'ROLE_MANAGER'] },
+  { label: 'Cycles',    icon: 'date_range',      route: '/admin/cycles',    roles: ['ROLE_ADMIN'] },
 ];
 
 @Component({
@@ -59,10 +59,11 @@ const ADMIN_ITEMS: NavItem[] = [
 
         <!-- Main nav -->
         <mat-nav-list>
-          @for (item of visibleNav(); track item.route) {
+          @for (item of NAV_ITEMS; track item.route) {
             <a mat-list-item
                [routerLink]="item.route"
                routerLinkActive="active-link"
+               [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
                (click)="mobile() && sidenav.close()">
               <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
               <span matListItemTitle>{{ item.label }}</span>
@@ -87,7 +88,7 @@ const ADMIN_ITEMS: NavItem[] = [
           </mat-nav-list>
         }
 
-        <!-- User info at bottom -->
+        <!-- User footer -->
         <div class="sidenav-footer">
           <mat-divider />
           <div class="user-info">
@@ -100,17 +101,14 @@ const ADMIN_ITEMS: NavItem[] = [
         </div>
       </mat-sidenav>
 
-      <!-- ── Main content area ────────────────────────────────── -->
+      <!-- ── Main content ─────────────────────────────────────── -->
       <mat-sidenav-content>
-
-        <!-- Top toolbar -->
         <mat-toolbar class="top-toolbar" color="primary">
-          <button mat-icon-button (click)="sidenav.toggle()" class="menu-btn">
+          <button mat-icon-button (click)="sidenav.toggle()">
             <mat-icon>menu</mat-icon>
           </button>
           <span class="toolbar-spacer"></span>
 
-          <!-- User menu -->
           <button mat-button [matMenuTriggerFor]="userMenu" class="user-menu-btn">
             <div class="user-avatar-sm">{{ initials() }}</div>
             <span class="user-menu-name">{{ auth.currentUser()?.name }}</span>
@@ -128,18 +126,15 @@ const ADMIN_ITEMS: NavItem[] = [
           </mat-menu>
         </mat-toolbar>
 
-        <!-- Page content -->
         <div class="page-content">
           <router-outlet />
         </div>
-
       </mat-sidenav-content>
     </mat-sidenav-container>
   `,
   styles: [`
     .shell-container { height: 100vh; }
 
-    /* Sidenav */
     .sidenav {
       width: 240px;
       border-right: 1px solid #e0e0e0;
@@ -148,9 +143,7 @@ const ADMIN_ITEMS: NavItem[] = [
     }
 
     .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: flex; align-items: center; gap: 10px;
       padding: 16px 20px;
     }
     .brand-icon { font-size: 1.5rem; }
@@ -158,10 +151,8 @@ const ADMIN_ITEMS: NavItem[] = [
 
     .section-label {
       padding: 12px 16px 4px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .8px;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .8px;
       color: #9e9e9e;
     }
 
@@ -174,9 +165,7 @@ const ADMIN_ITEMS: NavItem[] = [
 
     .sidenav-footer { margin-top: auto; }
     .user-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: flex; align-items: center; gap: 10px;
       padding: 12px 16px;
     }
     .user-avatar {
@@ -189,17 +178,10 @@ const ADMIN_ITEMS: NavItem[] = [
     .user-name { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .user-role { font-size: 11px; color: #888; }
 
-    /* Toolbar */
     .top-toolbar { position: sticky; top: 0; z-index: 100; }
     .toolbar-spacer { flex: 1; }
-    .menu-btn { margin-right: 8px; }
 
-    .user-menu-btn {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      color: white;
-    }
+    .user-menu-btn { display: flex; align-items: center; gap: 4px; color: white; }
     .user-avatar-sm {
       width: 28px; height: 28px; border-radius: 50%;
       background: rgba(255,255,255,.3);
@@ -208,21 +190,19 @@ const ADMIN_ITEMS: NavItem[] = [
     }
     .user-menu-name { font-size: 14px; margin: 0 2px; }
 
-    /* Page content */
     .page-content { min-height: calc(100vh - 64px); background: #f5f5f5; }
   `],
 })
 export class ShellComponent {
   auth = inject(AuthService);
-  private router = inject(Router);
+  NAV_ITEMS = NAV_ITEMS;
 
-  /** True when viewport < 768 px — uses CSS matchMedia */
   mobile = signal(window.innerWidth < 768);
 
-  visibleNav = () => NAV_ITEMS;
+  @HostListener('window:resize')
+  onResize() { this.mobile.set(window.innerWidth < 768); }
 
-  hasAdminAccess = () =>
-    this.auth.hasRole('ROLE_ADMIN', 'ROLE_MANAGER');
+  hasAdminAccess = () => this.auth.hasRole('ROLE_ADMIN', 'ROLE_MANAGER');
 
   visibleAdmin = () =>
     ADMIN_ITEMS.filter(item =>
@@ -235,10 +215,6 @@ export class ShellComponent {
   }
 
   friendlyRole(role: string): string {
-    return ({
-      ROLE_EMPLOYEE: 'Employee',
-      ROLE_MANAGER:  'Manager',
-      ROLE_ADMIN:    'Admin',
-    })[role] ?? role;
+    return ({ ROLE_EMPLOYEE: 'Employee', ROLE_MANAGER: 'Manager', ROLE_ADMIN: 'Admin' }[role]) ?? role;
   }
 }
