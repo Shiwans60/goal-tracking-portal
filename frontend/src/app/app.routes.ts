@@ -3,29 +3,29 @@ import { authGuard } from './core/guards/auth.guard';
 import { roleGuard } from './core/guards/role.guard';
 
 export const routes: Routes = [
-  // ── Public routes (no shell) ────────────────────────────────────────────
   {
     path: 'auth',
     loadChildren: () =>
       import('./features/auth/auth.routes').then(m => m.authRoutes)
   },
-
-  // ── Protected routes (inside ShellComponent) ────────────────────────────
   {
     path: '',
     loadComponent: () =>
       import('./layout/shell.component').then(m => m.ShellComponent),
     canActivate: [authGuard],
     children: [
-      {
-        path: '',
-        redirectTo: 'dashboard',
-        pathMatch: 'full'
-      },
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       {
         path: 'dashboard',
         loadComponent: () =>
           import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
+      },
+      {
+        path: 'analytics',
+        loadComponent: () =>
+          import('./features/dashboard/analytics-dashboard.component').then(
+            m => m.AnalyticsDashboardComponent
+          )
       },
       {
         path: 'goals',
@@ -48,6 +48,13 @@ export const routes: Routes = [
           import('./features/reports/reports.routes').then(m => m.reportRoutes)
       },
       {
+        path: 'audit',
+        loadChildren: () =>
+          import('./features/audit/audit.routes').then(m => m.auditRoutes),
+        canActivate: [roleGuard],
+        data: { roles: ['ROLE_ADMIN', 'ROLE_MANAGER'] }
+      },
+      {
         path: 'profile',
         loadChildren: () =>
           import('./features/profile/profile.routes').then(m => m.profileRoutes)
@@ -61,10 +68,5 @@ export const routes: Routes = [
       }
     ]
   },
-
-  // ── Catch-all ────────────────────────────────────────────────────────────
-  {
-    path: '**',
-    redirectTo: '/dashboard'
-  }
+  { path: '**', redirectTo: '/dashboard' }
 ];
