@@ -135,8 +135,7 @@ public class GoalService {
         if (goal.getStatus() != GoalStatus.PENDING_APPROVAL) {
             throw new BusinessException("Inline manager edits are only allowed on PENDING_APPROVAL goals");
         }
-        // Verify the manager actually manages this employee
-        assertManagerOwns(goal, managerId);
+        assertManagerOwnsOrAdmin(goal, managerId);
 
         GoalDtos.GoalResponse before = toResponse(goal);
 
@@ -148,7 +147,7 @@ public class GoalService {
             }
             goal.setWeightage(req.getWeightage());
         }
-        if (req.getNote() != null) goal.setRejectionNote(req.getNote()); // store as annotation
+        if (req.getNote() != null) goal.setRejectionNote(req.getNote());
 
         Goal saved = goalRepository.save(goal);
         auditService.log("Goal", saved.getId(), "MANAGER_EDITED", managerId, before, toResponse(saved));
@@ -192,7 +191,7 @@ public class GoalService {
         if (goal.getStatus() != GoalStatus.PENDING_APPROVAL) {
             throw new BusinessException("Only PENDING_APPROVAL goals can be approved");
         }
-        assertManagerOwns(goal, managerId);
+        assertManagerOwnsOrAdmin(goal, managerId);
 
         GoalDtos.GoalResponse before = toResponse(goal);
         User manager = findUser(managerId);
@@ -212,7 +211,7 @@ public class GoalService {
         if (goal.getStatus() != GoalStatus.PENDING_APPROVAL) {
             throw new BusinessException("Only PENDING_APPROVAL goals can be rejected");
         }
-        assertManagerOwns(goal, managerId);
+        assertManagerOwnsOrAdmin(goal, managerId);
 
         GoalDtos.GoalResponse before = toResponse(goal);
         goal.setStatus(GoalStatus.REJECTED);
@@ -228,7 +227,7 @@ public class GoalService {
         if (goal.getStatus() != GoalStatus.PENDING_APPROVAL) {
             throw new BusinessException("Only PENDING_APPROVAL goals can be returned for rework");
         }
-        assertManagerOwns(goal, managerId);
+        assertManagerOwnsOrAdmin(goal, managerId);
 
         GoalDtos.GoalResponse before = toResponse(goal);
         goal.setStatus(GoalStatus.REWORK);
@@ -281,8 +280,6 @@ public class GoalService {
         return summary;
     }
 
-    // ── Phase 5: team pending count for dashboard ────────────────────────────
-
     @Transactional(readOnly = true)
     public long countTeamPendingApproval(String managerId) {
         return goalRepository
@@ -306,18 +303,22 @@ public class GoalService {
     }
 
     /**
-     * Verifies the caller is either the employee's direct manager OR an ADMIN.
-     * We cannot check role here (no security context injected into service),
-     * so we rely on the controller's @PreAuthorize already limiting access.
-     * We still validate the manager–employee relationship to prevent horizontal
-     * privilege escalation.
+     * Enforces that the caller is either the employee's direct manager OR an ADMIN.
+     * Throws if a non-admin manager tries to act on a goal they don't own.
      */
-    private void assertManagerOwns(Goal goal, String managerId) {
-        User manager = goal.getEmployee().getManager();
-        if (manager != null && !manager.getId().toString().equals(managerId)) {
-            // Admin callers bypass the check — controller already guards with @PreAuthorize
-            // If the caller is not this employee's manager, we allow ADMIN (checked by role guard).
-            // We just skip the throw here and let the role-guard handle it.
+    private void assertManagerOwnsOrAdmin(Goal goal, String callerId) {
+        User caller = findUser(callerId);
+        // ADMINs bypass the manager relationship check
+        if (caller.getRole() == UserRole.ROLE_ADMIN) return;
+
+        User employeesManager = goal.getEmployee().getManager();
+        if (employeesManager == null) {
+            throw new BusinessException(
+                    "This employee has no assigned manager. Only an Admin can act on their goals.");
+        }
+        if (!employeesManager.getId().toString().equals(callerId)) {
+            throw new BusinessException(
+                    "You are not the direct manager of this employee and cannot act on their goals.");
         }
     }
 

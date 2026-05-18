@@ -12,7 +12,8 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update          # Flyway owns DDL; Hibernate only validates
+      # Flyway owns the DDL — Hibernate must only validate the schema
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -53,6 +54,7 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:4200}
   mail-from: ${MAIL_FROM:noreply@company.com}
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  google-client-id: ${GOOGLE_CLIENT_ID:your-google-client-id}
 
 # Actuator / Health
 management:

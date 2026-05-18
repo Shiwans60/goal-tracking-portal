@@ -7,27 +7,27 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatChipsModule } from '@angular/material/chips';
 import { GoalService } from '../../../core/services/goal.service';
 import { UomType } from '../../../core/models/goal.model';
 import { environment } from '../../../../environments/environment';
 
 const UOM_OPTIONS: { value: UomType; label: string; hint: string }[] = [
-  { value: 'NUMERIC_MIN', label: 'Numeric — Higher is Better',   hint: 'e.g. Sales Revenue' },
-  { value: 'NUMERIC_MAX', label: 'Numeric — Lower is Better',    hint: 'e.g. TAT, Cost' },
-  { value: 'PERCENTAGE_MIN', label: '% — Higher is Better',      hint: 'e.g. Customer Satisfaction' },
-  { value: 'PERCENTAGE_MAX', label: '% — Lower is Better',       hint: 'e.g. Defect Rate' },
-  { value: 'TIMELINE', label: 'Timeline (Date-based)',            hint: 'Completion vs Deadline' },
-  { value: 'ZERO_BASED', label: 'Zero-based',                    hint: 'e.g. Safety Incidents' }
+  { value: 'NUMERIC_MIN',    label: 'Numeric — Higher is Better',  hint: 'e.g. Sales Revenue, Units Produced' },
+  { value: 'NUMERIC_MAX',    label: 'Numeric — Lower is Better',   hint: 'e.g. TAT, Cost, Error Count' },
+  { value: 'PERCENTAGE_MIN', label: '% — Higher is Better',        hint: 'e.g. Customer Satisfaction %' },
+  { value: 'PERCENTAGE_MAX', label: '% — Lower is Better',         hint: 'e.g. Defect Rate %, Attrition %' },
+  { value: 'TIMELINE',       label: 'Timeline (Date-based)',        hint: 'Completion vs Deadline date' },
+  { value: 'ZERO_BASED',     label: 'Zero-based',                   hint: 'e.g. Safety Incidents (0 = 100%)' },
 ];
 
 const THRUST_AREAS = [
   'Revenue Growth', 'Customer Experience', 'Operational Excellence',
-  'People & Culture', 'Innovation', 'Risk & Compliance', 'Digital Transformation', 'Other'
+  'People & Culture', 'Innovation', 'Risk & Compliance', 'Digital Transformation', 'Other',
 ];
 
 interface Cycle { id: string; name: string; status: string; }
@@ -38,14 +38,23 @@ interface Cycle { id: string; name: string; status: string; }
   imports: [
     ReactiveFormsModule, RouterLink,
     MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatButtonModule, MatDatepickerModule, MatNativeDateModule,
-    MatCardModule, MatIconModule, MatProgressSpinnerModule, MatSnackBarModule
+    MatButtonModule, MatDatepickerModule,
+    MatCardModule, MatIconModule, MatProgressSpinnerModule,
+    MatSnackBarModule, MatChipsModule,
   ],
   template: `
     <div class="page-wrapper">
       <div class="page-header">
         <button mat-icon-button routerLink="/goals"><mat-icon>arrow_back</mat-icon></button>
-        <h2>{{ isEdit() ? 'Edit Goal' : 'New Goal' }}</h2>
+        <div>
+          <h2>{{ isEdit() ? 'Edit Goal' : 'New Goal' }}</h2>
+          @if (isSharedGoal()) {
+            <div class="shared-badge">
+              <mat-icon>share</mat-icon>
+              Shared Goal — only weightage is editable
+            </div>
+          }
+        </div>
       </div>
 
       <mat-card>
@@ -53,7 +62,7 @@ interface Cycle { id: string; name: string; status: string; }
           <form [formGroup]="form" (ngSubmit)="save()">
             <div class="form-grid">
 
-              <!-- Cycle (read-only in edit mode) -->
+              <!-- Cycle -->
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Performance Cycle</mat-label>
                 <mat-select formControlName="cycleId">
@@ -79,29 +88,34 @@ interface Cycle { id: string; name: string; status: string; }
               <!-- Weightage -->
               <mat-form-field appearance="outline">
                 <mat-label>Weightage (%)</mat-label>
-                <input matInput type="number" formControlName="weightage"
-                       placeholder="Min 10%" />
+                <input matInput type="number" formControlName="weightage" placeholder="Min 10%" />
                 <mat-suffix>%</mat-suffix>
                 <mat-hint>Min 10% · Max goals = 8 · Total must be 100%</mat-hint>
                 <mat-error>Must be between 10% and 100%</mat-error>
               </mat-form-field>
 
-              <!-- Title -->
+              <!-- Title (read-only for shared goals) -->
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Goal Title</mat-label>
                 <input matInput formControlName="title"
                        placeholder="Enter a clear, measurable goal title" />
+                @if (isSharedGoal()) {
+                  <mat-hint>🔒 Read-only — set by the goal owner</mat-hint>
+                }
                 <mat-error>Goal title is required</mat-error>
               </mat-form-field>
 
-              <!-- Description -->
+              <!-- Description (read-only for shared goals) -->
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Description (optional)</mat-label>
                 <textarea matInput formControlName="description" rows="3"
-                          placeholder="Provide context, scope, or acceptance criteria"></textarea>
+                          placeholder="Context, scope, or acceptance criteria"></textarea>
+                @if (isSharedGoal()) {
+                  <mat-hint>🔒 Read-only — set by the goal owner</mat-hint>
+                }
               </mat-form-field>
 
-              <!-- UoM Type -->
+              <!-- UoM Type (read-only for shared goals) -->
               <mat-form-field appearance="outline">
                 <mat-label>Unit of Measurement</mat-label>
                 <mat-select formControlName="uomType">
@@ -110,35 +124,46 @@ interface Cycle { id: string; name: string; status: string; }
                   }
                 </mat-select>
                 <mat-hint>{{ selectedUomHint() }}</mat-hint>
+                @if (isSharedGoal()) {
+                  <mat-hint>🔒 Read-only</mat-hint>
+                }
                 <mat-error>UoM is required</mat-error>
               </mat-form-field>
 
-              <!-- Target Value (hidden for ZERO_BASED / TIMELINE) -->
+              <!-- Target Value -->
               @if (selectedUom() !== 'ZERO_BASED' && selectedUom() !== 'TIMELINE') {
                 <mat-form-field appearance="outline">
                   <mat-label>Target Value</mat-label>
                   <input matInput type="number" formControlName="target" />
+                  @if (isSharedGoal()) {
+                    <mat-hint>🔒 Read-only</mat-hint>
+                  }
                 </mat-form-field>
               }
 
-              <!-- Target Date (shown for TIMELINE) -->
+              <!-- Target Date -->
               @if (selectedUom() === 'TIMELINE') {
                 <mat-form-field appearance="outline">
                   <mat-label>Target / Deadline Date</mat-label>
                   <input matInput [matDatepicker]="picker" formControlName="targetDate" />
                   <mat-datepicker-toggle matSuffix [for]="picker" />
                   <mat-datepicker #picker />
+                  @if (isSharedGoal()) {
+                    <mat-hint>🔒 Read-only</mat-hint>
+                  }
                 </mat-form-field>
               }
 
-            </div><!-- /form-grid -->
+            </div>
 
             <div class="form-actions">
               <button mat-stroked-button type="button" routerLink="/goals">Cancel</button>
               <button mat-raised-button color="primary" type="submit"
                       [disabled]="form.invalid || saving()">
                 @if (saving()) { <mat-spinner diameter="18" /> }
-                {{ isEdit() ? 'Save Changes' : 'Create Goal (Draft)' }}
+                @if (isSharedGoal()) { Save Weightage }
+                @else if (isEdit()) { Save Changes }
+                @else { Create Goal (Draft) }
               </button>
             </div>
           </form>
@@ -148,8 +173,14 @@ interface Cycle { id: string; name: string; status: string; }
   `,
   styles: [`
     .page-wrapper { padding: 24px; max-width: 820px; margin: auto; }
-    .page-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .page-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
     h2 { margin: 0; }
+    .shared-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; color: #7c4dff;
+      background: #ede7f6; padding: 4px 10px; border-radius: 12px; margin-top: 4px;
+    }
+    .shared-badge mat-icon { font-size: 14px; height: 14px; width: 14px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .full-width { grid-column: span 2; }
     .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
@@ -157,7 +188,7 @@ interface Cycle { id: string; name: string; status: string; }
       .form-grid { grid-template-columns: 1fr; }
       .full-width { grid-column: span 1; }
     }
-  `]
+  `],
 })
 export class GoalFormComponent implements OnInit {
   private fb          = inject(FormBuilder);
@@ -170,12 +201,13 @@ export class GoalFormComponent implements OnInit {
   uomOptions  = UOM_OPTIONS;
   thrustAreas = THRUST_AREAS;
 
-  isEdit  = signal(false);
-  saving  = signal(false);
-  goalId  = signal<string | null>(null);
-  cycles  = signal<Cycle[]>([]);
+  isEdit      = signal(false);
+  isSharedGoal = signal(false);
+  saving      = signal(false);
+  goalId      = signal<string | null>(null);
+  cycles      = signal<Cycle[]>([]);
 
-  selectedUom = signal<UomType | null>(null);
+  selectedUom     = signal<UomType | null>(null);
   selectedUomHint = () =>
     UOM_OPTIONS.find(o => o.value === this.selectedUom())?.hint ?? '';
 
@@ -187,41 +219,43 @@ export class GoalFormComponent implements OnInit {
     uomType:     ['' as UomType, Validators.required],
     target:      [null as number | null],
     targetDate:  [null as Date | null],
-    weightage:   [null as number | null, [Validators.required, Validators.min(10), Validators.max(100)]]
+    weightage:   [null as number | null, [Validators.required, Validators.min(10), Validators.max(100)]],
   });
 
   ngOnInit() {
-    // Watch UoM changes for conditional fields
     this.form.get('uomType')!.valueChanges.subscribe(v => this.selectedUom.set(v as UomType));
 
-    // Load available cycles (active + upcoming)
-    this.http.get<Cycle[]>(`${environment.apiBaseUrl}/api/admin/cycles`).subscribe({
+    // Use /all endpoint — accessible by all roles (fix from Phase 5 bug)
+    this.http.get<Cycle[]>(`${environment.apiBaseUrl}/api/admin/cycles/all`).subscribe({
       next: cycles => {
-        const active = cycles.filter(c => c.status === 'ACTIVE' || c.status === 'UPCOMING');
-        this.cycles.set(active);
-        // Pre-select active cycle if creating new
+        this.cycles.set(cycles.filter(c => c.status === 'ACTIVE' || c.status === 'UPCOMING'));
         if (!this.isEdit()) {
-          const activeCycle = cycles.find(c => c.status === 'ACTIVE');
-          if (activeCycle) this.form.patchValue({ cycleId: activeCycle.id });
+          const active = cycles.find(c => c.status === 'ACTIVE');
+          if (active) this.form.patchValue({ cycleId: active.id });
         }
       },
       error: () => {
-        // Fallback: try the active-cycle endpoint
+        // Fallback: try active endpoint
         this.http.get<Cycle>(`${environment.apiBaseUrl}/api/admin/cycles/active`).subscribe({
           next: cycle => {
             this.cycles.set([cycle]);
             if (!this.isEdit()) this.form.patchValue({ cycleId: cycle.id });
-          }
+          },
+          error: () => this.snack.open('Could not load cycles. Please try again.', 'Dismiss', { duration: 4000 }),
         });
-      }
+      },
     });
 
-    // If editing, load the existing goal
+    // Load goal if editing
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.isEdit.set(true);
       this.goalId.set(id);
       this.goalService.getGoalById(id).subscribe(g => {
+        // Detect shared goal (parent set, or isShared flag)
+        const shared = g.isShared && !!g.parentGoalId;
+        this.isSharedGoal.set(shared);
+
         this.form.patchValue({
           cycleId:     g.cycleId,
           thrustArea:  g.thrustArea,
@@ -229,10 +263,19 @@ export class GoalFormComponent implements OnInit {
           description: g.description ?? '',
           uomType:     g.uomType,
           target:      g.target ?? null,
-          weightage:   g.weightage
+          weightage:   g.weightage,
         });
-        // cycleId is locked when editing
+
+        // Lock cycle and all non-weightage fields for shared goals
         this.form.get('cycleId')!.disable();
+        if (shared) {
+          this.form.get('title')!.disable();
+          this.form.get('description')!.disable();
+          this.form.get('uomType')!.disable();
+          this.form.get('target')!.disable();
+          this.form.get('targetDate')!.disable();
+          this.form.get('thrustArea')!.disable();
+        }
       });
     }
   }
@@ -242,11 +285,10 @@ export class GoalFormComponent implements OnInit {
     this.saving.set(true);
     const raw = this.form.getRawValue();
 
-    // Format targetDate as ISO string if present
     const payload = {
       ...raw,
       targetDate: raw.targetDate
-        ? (raw.targetDate as any instanceof Date
+        ? (raw.targetDate instanceof Date
             ? (raw.targetDate as Date).toISOString().split('T')[0]
             : raw.targetDate)
         : null,
@@ -258,17 +300,17 @@ export class GoalFormComponent implements OnInit {
 
     obs.subscribe({
       next: () => {
-        this.snack.open(
-          this.isEdit() ? 'Goal updated!' : 'Goal created as Draft.',
-          'OK', { duration: 3000 }
-        );
+        const msg = this.isSharedGoal()
+          ? 'Weightage updated!'
+          : this.isEdit() ? 'Goal updated!' : 'Goal created as Draft.';
+        this.snack.open(msg, 'OK', { duration: 3000 });
         this.router.navigate(['/goals']);
       },
-      error: (err) => {
+      error: err => {
         this.saving.set(false);
         const msg = err?.error?.detail ?? err?.error?.message ?? 'Save failed. Please try again.';
         this.snack.open(msg, 'Dismiss', { duration: 5000 });
-      }
+      },
     });
   }
 }

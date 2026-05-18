@@ -13,23 +13,31 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Cycle endpoints.
+ *
+ * NOTE: Class-level @PreAuthorize removed so that the /active and /all endpoints
+ * can be accessed by EMPLOYEE and MANAGER roles (needed by the goal-creation form).
+ * Admin-only operations keep method-level guards.
+ */
 @RestController
 @RequestMapping("/api/admin/cycles")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin - Cycles", description = "Cycle management (Admin only)")
+@Tag(name = "Admin - Cycles", description = "Cycle management")
 @SecurityRequirement(name = "Bearer Auth")
 public class CycleController {
 
     private final CycleRepository cycleRepository;
 
+    // ── Admin only ────────────────────────────────────────────────────────────
+
     @GetMapping
-    @Operation(summary = "List all cycles")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List all cycles (Admin)")
     public ResponseEntity<List<CycleResponse>> listCycles() {
         List<CycleResponse> cycles = cycleRepository.findAll()
                 .stream()
@@ -38,15 +46,40 @@ public class CycleController {
         return ResponseEntity.ok(cycles);
     }
 
+    // ── All authenticated roles ───────────────────────────────────────────────
+
+    /**
+     * GET /api/admin/cycles/active
+     * Returns the currently active cycle.
+     * Accessible by all roles so the goal-creation form can pre-select the cycle.
+     */
     @GetMapping("/active")
-    @PreAuthorize("hasAnyRole('EMPLOYEE','MANAGER','ADMIN')")
-    @Operation(summary = "Get the current active cycle")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
+    @Operation(summary = "Get the current active cycle (all roles)")
     public ResponseEntity<CycleResponse> getActiveCycle() {
         Cycle cycle = cycleRepository
                 .findFirstByStatusOrderByStartDateDesc(CycleStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("No active cycle found"));
         return ResponseEntity.ok(toResponse(cycle));
     }
+
+    /**
+     * GET /api/admin/cycles/all
+     * Returns all cycles for the goal-creation form dropdown.
+     * Accessible by all roles.
+     */
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'ADMIN')")
+    @Operation(summary = "List all cycles for goal creation (all roles)")
+    public ResponseEntity<List<CycleResponse>> listAllCycles() {
+        List<CycleResponse> cycles = cycleRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(cycles);
+    }
+
+    // ── Mapper ────────────────────────────────────────────────────────────────
 
     private CycleResponse toResponse(Cycle c) {
         CycleResponse r = new CycleResponse();
